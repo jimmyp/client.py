@@ -287,7 +287,13 @@ class MessageBodyData(MessageBody, ABC):
 
         :return: A message response
         """
+        # Some devices respond with ``{"code": 0, "data": null}``. ``"data" in
+        # body`` is true even though the value is ``None``, so without this
+        # guard ``None`` flows into the data handlers and crashes with
+        # ``AttributeError: 'NoneType' object has no attribute 'state'``.
         if "data" in body:
+            if body["data"] is None:
+                return HandlingResult.analyse()
             return cls.__handle_body_data(event_bus, body["data"])
 
         return super()._handle_body(event_bus, body)

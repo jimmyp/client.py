@@ -12,6 +12,7 @@ from deebot_client.message import (
     HandlingResult,
     HandlingState,
     Message,
+    MessageBodyDataDict,
     MessagePayloadType,
     MessageStr,
 )
@@ -70,6 +71,32 @@ def test_WronglyImplementedMessage() -> None:
     result = WronglyImplementedMessage.handle(event_bus, {})
 
     assert result.state == HandlingState.ERROR
+
+
+class _BodyDataDictMessage(MessageBodyDataDict):
+    """Mock class for MessageBodyDataDict."""
+
+    NAME = "BodyDataDictMessage"
+
+    @classmethod
+    def _handle_body_data_dict(
+        cls, _event_bus: EventBus, _data: dict[str, object]
+    ) -> HandlingResult:
+        return HandlingResult.success()
+
+
+def test_MessageBodyData_should_not_crash_on_null_data() -> None:
+    """Some devices respond with ``{"body": {"code": 0, "data": null}}``.
+
+    ``"data" in body`` is true even though the value is ``None``, so ``None``
+    used to flow into the handler and crash with
+    ``AttributeError: 'NoneType' object has no attribute 'state'``.
+    """
+    event_bus = Mock(spec_set=EventBus)
+
+    result = _BodyDataDictMessage.handle(event_bus, {"body": {"code": 0, "data": None}})
+
+    assert result.state == HandlingState.ANALYSE_LOGGED
 
 
 @pytest.fixture
