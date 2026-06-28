@@ -27,11 +27,28 @@ say(){ printf '\n=== %s ===\n' "$*"; }
 
 say "1/6 boot emulator (visible window, host GPU)"
 if ! adb devices | grep -q "$S"; then
-  "$ANDROID_HOME/emulator/emulator" -avd "$AVD" -writable-system -gpu host -no-boot-anim >/tmp/emu.log 2>&1 &
+  # Tuned for a fast host: more cores/RAM, host GPU, no audio/snapshot overhead,
+  # full network speed + no simulated latency for reliability.
+  "$ANDROID_HOME/emulator/emulator" -avd "$AVD" -writable-system \
+    -gpu host -cores 6 -memory 6144 \
+    -no-boot-anim -no-audio -no-snapshot \
+    -netspeed full -netdelay none \
+    >/tmp/emu.log 2>&1 &
 fi
 adb wait-for-device
 until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; do sleep 2; done
 echo "booted."
+
+say "1b/6 wait for network to actually validate (not just boot)"
+# The app times out if it fires requests before connectivity is VALIDATED.
+# Wait for a validated default network (public DNS reachable), up to ~60s.
+for i in $(seq 1 30); do
+  if adb shell dumpsys connectivity 2>/dev/null | grep -q "VALIDATED"; then echo "network validated."; break; fi
+  sleep 2
+done
+# Pin a reliable public DNS in the guest (cuts DNS-hiccup timeouts)
+adb root >/dev/null 2>&1; sleep 1
+adb shell "setprop net.dns1 8.8.8.8; setprop net.dns2 1.1.1.1" >/dev/null 2>&1 || true
 
 say "2/6 root + permissive (required for frida to attach)"
 adb root >/dev/null 2>&1; sleep 2; adb wait-for-device
