@@ -77,3 +77,52 @@ added.
   ACL-scoped — kept for reference).
 - `ngiot_capture_wild.py` / `ngiot_probe.py` — earlier diagnostic helpers.
 - `mitm_ngiot.py` — mitmproxy addon to capture app `endpoint/control` traffic.
+
+---
+
+## Bring the capture/test rig back up (for a follow-up session)
+
+The Android emulator AVD `ngiot` persists at `~/.android/avd/ngiot.avd` (its userdata
+holds the v3.13.0 Ecovacs app install + the mitmproxy system CA). Tooling under `/tmp`
+(frida-server, app split APKs, unpinning scripts, capvenv, the `*.0` system cert) may be
+cleared on a Mac reboot — re-fetch if missing (see this file's history / commit messages).
+
+```bash
+export ANDROID_HOME=$HOME/Library/Android/sdk
+export ANDROID_SDK_ROOT=$ANDROID_HOME ANDROID_AVD_HOME=$HOME/.android/avd
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+
+# 1. Boot emulator (software GL is far more stable on Apple Silicon than host GL)
+"$ANDROID_HOME/emulator/emulator" -avd ngiot -writable-system -no-snapshot \
+  -no-boot-anim -gpu swiftshader_indirect &
+adb wait-for-device
+until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 2; done
+
+# 2. Root + permissive + start frida-server (binary at /data/local/tmp/frida-server;
+#    re-push /tmp/frida-server if the device lost it)
+adb root; sleep 2; adb shell setenforce 0
+adb shell "nohup /data/local/tmp/frida-server >/dev/null 2>&1 &"; sleep 3
+
+# 3. mitmproxy with the ngiot capture addon (CA already in the AVD's system store)
+cd /Users/jim/code/client.py && source /tmp/capvenv/bin/activate
+nohup mitmdump -s tools/mitm_ngiot.py --listen-port 8080 \
+  --set console_eventlog_verbosity=warn >/tmp/mitm.out 2>&1 &
+adb shell settings delete global http_proxy   # frida scripts proxy in-process; don't double up
+
+# 4. Set a sane phone display (the AVD boots tiny: 320x640)
+adb shell wm size 1080x1920; adb shell wm density 440
+
+# 5. Launch app, then ATTACH (spawn -f fails "jailed Android" on this AVD; native hooks
+#    SIGSEGV this app -> JAVA-ONLY scripts). Re-install splits from /tmp/ecovacs313 if gone.
+adb shell am start -n com.eco.global.app/com.eco.main.activity.EcoLauncherActivity; sleep 6
+PID=$(adb shell pidof com.eco.global.app | tr -d '\r')
+cd /tmp/frida-interception-and-unpinning && frida -U -p "$PID" \
+  -l ./config.js -l ./android/android-proxy-override.js \
+  -l ./android/android-system-certificate-injection.js \
+  -l ./android/android-certificate-unpinning.js \
+  -l ./android/android-disable-root-detection.js
+# Drive the app; ngiot endpoint/control calls land in ngiot_app_capture.jsonl (gitignored).
+```
+
+For a pure transport/auth round-trip without the app/emulator, use
+`tools/ngiot_endpoint_probe.py` with `~/.ecovacs.env` sourced.
