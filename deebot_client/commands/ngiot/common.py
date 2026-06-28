@@ -12,7 +12,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import TYPE_CHECKING, Any
 
-from deebot_client.command import Command, CommandWithMessageHandling, GetCommand
+from deebot_client.command import CommandWithMessageHandling, GetCommand
 from deebot_client.const import DataType
 from deebot_client.events import AvailabilityEvent
 from deebot_client.logging_filter import get_logger
@@ -142,9 +142,7 @@ class NgiotSetCommand(NgiotExecuteCommand, ABC):
         return HandlingResult.success()
 
 
-# Re-exported for type checkers / callers building command lists.
 __all__ = [
-    "Command",
     "NgiotCommand",
     "NgiotExecuteCommand",
     "NgiotGetCommand",
