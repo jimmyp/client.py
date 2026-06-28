@@ -20,6 +20,8 @@ from .exceptions import (
 )
 from .logging_filter import get_logger
 from .models import Credentials
+from .ngiot_client import NgiotClient
+from .sst_authentication import SstAuthenticator
 from .util import cancel, create_task, md5
 from .util.continents import get_continent_url_postfix
 from .util.countries import get_ecovacs_country
@@ -361,6 +363,20 @@ class Authenticator:
         self._credentials: Credentials | None = None
         self._refresh_handle: asyncio.TimerHandle | None = None
         self._tasks: set[asyncio.Future[Any]] = set()
+        self._config = config
+        self._ngiot_client: NgiotClient | None = None
+
+    @property
+    def ngiot(self) -> NgiotClient:
+        """Return the lazily-created ngiot (endpoint/control) transport client.
+
+        Created once per authenticator so the per-device SST cache is shared
+        across all ngiot commands for the account.
+        """
+        if self._ngiot_client is None:
+            session = self._config.session
+            self._ngiot_client = NgiotClient(session, SstAuthenticator(self, session))
+        return self._ngiot_client
 
     async def authenticate(self, *, force: bool = False) -> Credentials:
         """Authenticate on ecovacs servers."""
