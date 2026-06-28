@@ -83,6 +83,23 @@ async def test_GetState_parses_full_captured_response() -> None:
     )
 
 
+async def test_GetState_parses_live_default_fan_and_water() -> None:
+    # Wire values observed live on a real q287s6 in its default state:
+    # fanMode "auto" and waterMode "mid" (NOT "medium"). Regression for the
+    # silently-dropped fan/water events found in manual testing.
+    await assert_ngiot_command(
+        GetState(),
+        _response({"battery": 100, "fanMode": "auto", "waterMode": "mid"}),
+        [
+            BatteryEvent(100),
+            FanSpeedEvent(FanSpeedLevel.NORMAL),
+            WaterAmountEvent(WaterAmount.MEDIUM),
+        ],
+        expected_apn=10001,
+        expected_data={"fields": STATE_FIELDS},
+    )
+
+
 async def test_GetState_docked_when_charging() -> None:
     await assert_ngiot_command(
         GetState(),

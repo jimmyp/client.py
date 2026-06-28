@@ -31,6 +31,7 @@ from deebot_client.events.water_info import (
     WaterAmount,
     WaterAmountEvent,
 )
+from deebot_client.logging_filter import get_logger
 from deebot_client.message import HandlingResult
 from deebot_client.models import State
 
@@ -38,6 +39,8 @@ from .common import NgiotGetCommand
 
 if TYPE_CHECKING:
     from deebot_client.event_bus import EventBus
+
+_LOGGER = get_logger(__name__)
 
 # Fields requested in the comprehensive state read.
 STATE_FIELDS = [
@@ -55,9 +58,12 @@ STATE_FIELDS = [
     "consumables",
 ]
 
-# ngiot fanMode <-> FanSpeedLevel. Wire-verified: "quiet", "strong".
-# "normal"/"max" enum names are inferred and refined by live capture.
+# ngiot fanMode <-> FanSpeedLevel. Wire-verified live on q287s6: "auto" (the
+# device default), "quiet", "strong". "auto" is the device's adaptive mode and
+# has no dedicated FanSpeedLevel, so it maps to NORMAL (the neutral middle).
+# "standard"/"normal"/"max" remain best-effort pending a full app capture.
 NGIOT_FAN_MODE_TO_LEVEL = {
+    "auto": FanSpeedLevel.NORMAL,
     "quiet": FanSpeedLevel.QUIET,
     "standard": FanSpeedLevel.NORMAL,
     "normal": FanSpeedLevel.NORMAL,
@@ -66,21 +72,23 @@ NGIOT_FAN_MODE_TO_LEVEL = {
 }
 NGIOT_LEVEL_TO_FAN_MODE = {
     FanSpeedLevel.QUIET: "quiet",
-    FanSpeedLevel.NORMAL: "normal",
+    FanSpeedLevel.NORMAL: "auto",
     FanSpeedLevel.MAX: "strong",
     FanSpeedLevel.MAX_PLUS: "max",
 }
 
-# ngiot waterMode <-> WaterAmount. Wire-verified: "low", "high".
+# ngiot waterMode <-> WaterAmount. Wire-verified live on q287s6: "mid" (the
+# device default; NOT "medium"), "low", "high". "ultraHigh" is best-effort
+# pending a full app capture.
 NGIOT_WATER_MODE_TO_AMOUNT = {
     "low": WaterAmount.LOW,
-    "medium": WaterAmount.MEDIUM,
+    "mid": WaterAmount.MEDIUM,
     "high": WaterAmount.HIGH,
     "ultraHigh": WaterAmount.ULTRAHIGH,
 }
 NGIOT_AMOUNT_TO_WATER_MODE = {
     WaterAmount.LOW: "low",
-    WaterAmount.MEDIUM: "medium",
+    WaterAmount.MEDIUM: "mid",
     WaterAmount.HIGH: "high",
     WaterAmount.ULTRAHIGH: "ultraHigh",
 }
@@ -143,11 +151,21 @@ class GetState(NgiotGetCommand):
         if (state := _determine_state(data, error_code)) is not None:
             event_bus.notify(StateEvent(state))
 
-        if (fan_mode := data.get("fanMode")) in NGIOT_FAN_MODE_TO_LEVEL:
-            event_bus.notify(FanSpeedEvent(NGIOT_FAN_MODE_TO_LEVEL[fan_mode]))
+        if (fan_mode := data.get("fanMode")) is not None:
+            if fan_mode in NGIOT_FAN_MODE_TO_LEVEL:
+                event_bus.notify(FanSpeedEvent(NGIOT_FAN_MODE_TO_LEVEL[fan_mode]))
+            else:
+                _LOGGER.warning("Unmapped ngiot fanMode %r; please report it", fan_mode)
 
-        if (water_mode := data.get("waterMode")) in NGIOT_WATER_MODE_TO_AMOUNT:
-            event_bus.notify(WaterAmountEvent(NGIOT_WATER_MODE_TO_AMOUNT[water_mode]))
+        if (water_mode := data.get("waterMode")) is not None:
+            if water_mode in NGIOT_WATER_MODE_TO_AMOUNT:
+                event_bus.notify(
+                    WaterAmountEvent(NGIOT_WATER_MODE_TO_AMOUNT[water_mode])
+                )
+            else:
+                _LOGGER.warning(
+                    "Unmapped ngiot waterMode %r; please report it", water_mode
+                )
 
         if (mop_state := data.get("mopState")) is not None:
             event_bus.notify(MopAttachedEvent(mop_state == "installed"))
