@@ -106,3 +106,25 @@ RESP body.data: null
 REQ body.data: ["getCleanInfo", "getCleanInfo_V2", "getBattery", "getStationState", "getChargeState", "getAutoEmpty"]
 RESP body.data: {"data": ["getCleanInfo", "getCleanInfo_V2", "getBattery", "getStationState", "getChargeState", "getAutoEmpty"]}
 ```
+
+---
+
+## Update: control commands captured from the app + confirmed on device (2026-06-28)
+
+A second app capture + live confirmation corrected three inferred commands:
+
+- **PAUSE**: apn `40009` `{"pauseSwitch": true}`  (was correct)
+- **RESUME**: apn **`40011`** `{"pauseSwitch": false}`  -- a SEPARATE apn from pause;
+  the earlier inferred `40009 {pauseSwitch:false}` returned `code:1` and did not
+  reliably resume. `40011` returns `code:0` and resumes (confirmed: pauseSwitch
+  true->false while cleaning).
+- **RETURN TO DOCK**: apn **`40013`** `{"chargeSwitch": true}`  -- not the earlier
+  `40015 {chargeSwitch:false}`. `40013` returns `code:0` and the device reports
+  `status:"goCharge"`.
+
+Other write surfaces seen from the app (not yet wired): `30007 {expandedMapReport:""}`
+(map report request).
+
+Fan/water enum values actually emitted by the app (wire-verified):
+- fanMode: `auto` (default), `quiet`, `strong`, `max`
+- waterMode: `low`, `mid` (NOT "medium"), `high`

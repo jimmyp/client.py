@@ -24,7 +24,7 @@ _OK: dict[str, Any] = {"header": {}, "body": {"data": None, "code": 0, "msg": "o
         ),
         (CleanAction.STOP, 40002, {"cleanSwitch": False}, State.IDLE),
         (CleanAction.PAUSE, 40009, {"pauseSwitch": True}, State.PAUSED),
-        (CleanAction.RESUME, 40009, {"pauseSwitch": False}, State.CLEANING),
+        (CleanAction.RESUME, 40011, {"pauseSwitch": False}, State.CLEANING),
     ],
 )
 async def test_Clean_actions(
@@ -43,11 +43,12 @@ async def test_Clean_actions(
 
 
 async def test_Charge_returns_to_dock() -> None:
-    # Captured: apn 40015 {chargeSwitch: false} == return to dock.
+    # Captured live from the app + confirmed on device:
+    # apn 40013 {chargeSwitch: true} == return to dock (-> status "goCharge").
     await assert_ngiot_command(
         Charge(),
         _OK,
         StateEvent(State.RETURNING),
-        expected_apn=40015,
-        expected_data={"chargeSwitch": False},
+        expected_apn=40013,
+        expected_data={"chargeSwitch": True},
     )

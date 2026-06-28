@@ -58,10 +58,10 @@ STATE_FIELDS = [
     "consumables",
 ]
 
-# ngiot fanMode <-> FanSpeedLevel. Wire-verified live on q287s6: "auto" (the
-# device default), "quiet", "strong". "auto" is the device's adaptive mode and
-# has no dedicated FanSpeedLevel, so it maps to NORMAL (the neutral middle).
-# "standard"/"normal"/"max" remain best-effort pending a full app capture.
+# ngiot fanMode <-> FanSpeedLevel. Wire-verified live on q287s6 from the app:
+# "auto" (device default), "quiet", "strong", "max". "auto" is the adaptive mode
+# with no dedicated FanSpeedLevel, so it maps to NORMAL (the neutral middle).
+# "standard"/"normal" were never observed and are kept only as defensive aliases.
 NGIOT_FAN_MODE_TO_LEVEL = {
     "auto": FanSpeedLevel.NORMAL,
     "quiet": FanSpeedLevel.QUIET,
@@ -77,9 +77,9 @@ NGIOT_LEVEL_TO_FAN_MODE = {
     FanSpeedLevel.MAX_PLUS: "max",
 }
 
-# ngiot waterMode <-> WaterAmount. Wire-verified live on q287s6: "mid" (the
-# device default; NOT "medium"), "low", "high". "ultraHigh" is best-effort
-# pending a full app capture.
+# ngiot waterMode <-> WaterAmount. Wire-verified live on q287s6 from the app:
+# "low", "mid" (NOT "medium"), "high". "ultraHigh" was never observed and is
+# kept only as a defensive alias.
 NGIOT_WATER_MODE_TO_AMOUNT = {
     "low": WaterAmount.LOW,
     "mid": WaterAmount.MEDIUM,
