@@ -39,7 +39,29 @@ class Loop:
         self.s, self.mqs, self.sst = session, mqs, sst
         self.did, self.cls, self.res = did, cls, res
 
+    # Hard safety: never send a key that could move/redirect the bot. Mapping
+    # must not drive the vacuum. Reads (apn 10001 field-query) are exempt.
+    _FORBIDDEN_KEYS = frozenset(
+        {
+            "cleanSwitch",
+            "pauseSwitch",
+            "chargeSwitch",
+            "cleanMode",
+            "relocate",
+            "goCharge",
+            "workMode",
+            "cleanValues",
+            "areas",
+            "act",
+        }
+    )
+
     async def control(self, apn, data):
+        if isinstance(data, dict) and data and "fields" not in data:
+            bad = self._FORBIDDEN_KEYS & set(data)
+            if bad:
+                msg = f"refusing write with motion/clean keys {sorted(bad)} (apn={apn})"
+                raise RuntimeError(msg)
         url = f"https://{self.mqs}/api/iot/endpoint/control"
         si = secrets.token_hex(16)
         payload = {
