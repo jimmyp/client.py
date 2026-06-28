@@ -9,7 +9,7 @@ Device: `class=q287s6`, `smartType=MQ_AP`, `UILogicId=y30plus_ww_h_y30h5`,
 
 ## SOLVED — ngiot transport + SST auth work
 
-Use `tools/ngiot_endpoint_probe.py`. Two steps:
+Use `tools/ngiot-reverse-engineering/verify/endpoint_control_probe.py`. Two steps:
 
 **1. Mint an SST token** (HTTP 200):
 ```
@@ -60,7 +60,7 @@ everything (wrong transport — this is what crashed `message.py`, fixed separat
 
 ## Capturing the app's apn values (next step)
 
-`tools/mitm_ngiot.py` is a mitmproxy addon that logs `endpoint/control` calls.
+`tools/ngiot-reverse-engineering/capture/mitmproxy_addon.py` is a mitmproxy addon that logs `endpoint/control` calls.
 mitmproxy alone is NOT enough: on Android 7+ the Ecovacs app rejects
 user-installed CAs (TLS handshake fails for every `*.ecouser.net` / `*.ecovacs.com`
 host). Needs one of:
@@ -72,8 +72,8 @@ q287s6 can be implemented on top of PR #1569's transport and a hardware profile
 added.
 
 ## Tools in this dir
-- `ngiot_endpoint_probe.py` — mint SST + call endpoint/control (VERIFIED working).
-- `ngiot_capture_live.py` — passive MQTT capture (returns nothing; broker is
+- `verify/endpoint_control_probe.py` — mint SST + call endpoint/control (VERIFIED working).
+- `capture/03_mqtt_live_capture.py` — passive MQTT capture (returns nothing; broker is
   ACL-scoped — kept for reference).
-- `ngiot_capture_wild.py` / `ngiot_probe.py` — earlier diagnostic helpers.
-- `mitm_ngiot.py` — mitmproxy addon to capture app `endpoint/control` traffic.
+- `capture/02_mqtt_wildcard_capture.py` / `capture/01_rest_routing_probe.py` — earlier diagnostic helpers.
+- `capture/mitmproxy_addon.py` — mitmproxy addon to capture app `endpoint/control` traffic.

@@ -1,6 +1,6 @@
 """Live end-to-end check for q287s6 using the new ngiot command classes.
 
-Unlike ``ngiot_endpoint_probe.py`` (which proved the raw transport), this script
+Unlike ``verify/endpoint_control_probe.py`` (which proved the raw transport), this script
 drives the actual library command classes added for the DEEBOT NEO 2.0 PLUS:
 
 1. Authenticate, then locate the q287s6 device (now recognised, so it appears in
@@ -14,8 +14,8 @@ Credentials come from the environment (e.g. ``source ~/.ecovacs.env``):
     ECOVACS_USERNAME, ECOVACS_PASSWORD, ECOVACS_COUNTRY
 
 Run:
-    python tools/ngiot_q287s6_live.py            # read-only
-    python tools/ngiot_q287s6_live.py --control  # + benign fan re-apply
+    python tools/ngiot-reverse-engineering/verify/q287s6_live_e2e.py            # read-only
+    python tools/ngiot-reverse-engineering/verify/q287s6_live_e2e.py --control  # + benign fan re-apply
 
 TLS note: this uses the library's normal aiohttp session with full certificate
 verification. It never disables TLS checks.

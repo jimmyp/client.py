@@ -24,7 +24,7 @@ tests.
 
 ## What was verified live
 
-`tools/ngiot_q287s6_live.py` and ad-hoc probes, run with real credentials:
+`tools/ngiot-reverse-engineering/verify/q287s6_live_e2e.py` and ad-hoc probes, run with real credentials:
 
 - **Read (idle/docked):** `BatteryEvent(100)`, `StateEvent(DOCKED)`,
   `MopAttachedEvent(True)`, `ErrorEvent(0, NoError)`, four `LifeSpanEvent`s
@@ -96,7 +96,7 @@ before they shipped.
   *actually* makes the physical device do the thing (the device returns `code:0`
   for some no-op/unknown payloads, so "accepted" ≠ "correct"); the full set of
   valid enum values; new/unknown surfaces. These remain manual / capture-driven.
-  `tools/ngiot_q287s6_live.py` is the repeatable live check for when a device +
+  `tools/ngiot-reverse-engineering/verify/q287s6_live_e2e.py` is the repeatable live check for when a device +
   credentials are available.
 
 ## Test run

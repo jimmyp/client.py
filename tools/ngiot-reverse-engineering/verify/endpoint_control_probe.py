@@ -17,9 +17,9 @@ WHAT'S STILL UNKNOWN:
   non-rooted phone -- needs Frida SSL-unpinning or an emulator system CA).
 
 Run (creds from env, e.g. sourced from ~/.ecovacs.env):
-    python tools/ngiot_endpoint_probe.py [apn] [json_body_data]
+    python tools/ngiot-reverse-engineering/verify/endpoint_control_probe.py [apn] [json_body_data]
 e.g.
-    python tools/ngiot_endpoint_probe.py getBattery '{"type":["all"]}'
+    python tools/ngiot-reverse-engineering/verify/endpoint_control_probe.py getBattery '{"type":["all"]}'
 """
 
 from __future__ import annotations

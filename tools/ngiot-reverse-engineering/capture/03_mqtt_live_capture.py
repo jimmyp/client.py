@@ -7,7 +7,7 @@ Same auth/connection path as ngiot_capture_wild.py, but:
   the vacuum at your own pace.
 
 Run (creds come from the environment, e.g. sourced from ~/.ecovacs.env):
-    python tools/ngiot_capture_live.py
+    python tools/ngiot-reverse-engineering/capture/03_mqtt_live_capture.py
 
 Stop it (from another shell, or have the caller kill it) once you've
 exercised the vacuum: start a clean, pause, resume, send to dock.

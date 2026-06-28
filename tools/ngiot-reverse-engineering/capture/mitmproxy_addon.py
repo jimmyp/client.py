@@ -1,7 +1,7 @@
 """mitmproxy addon: capture Ecovacs ngiot endpoint/control + SST traffic.
 
 Run:
-    mitmdump -s tools/mitm_ngiot.py --listen-port 8080
+    mitmdump -s tools/ngiot-reverse-engineering/capture/mitmproxy_addon.py --listen-port 8080
 
 Writes each relevant request/response pair as one JSON line to
 ngiot_app_capture.jsonl in the cwd. We only keep the calls we care about so the
