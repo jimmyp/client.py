@@ -77,3 +77,49 @@ added.
   ACL-scoped — kept for reference).
 - `ngiot_capture_wild.py` / `ngiot_probe.py` — earlier diagnostic helpers.
 - `mitm_ngiot.py` — mitmproxy addon to capture app `endpoint/control` traffic.
+
+---
+
+## Headless capability feedback loop (tools/ngiot_capability_loop.py)
+
+The app-capture path is flaky (the app goes offline under MITM; map/control screens are
+WebViews). But we don't need the app to map most surfaces: `apn=10001` is a unified
+field-query oracle, and the device answers it headlessly via plain SST + endpoint/control.
+
+The loop (no app, no MITM, no emulator):
+- READ discovery: ask 10001 for a union of candidate field names. A **non-null value** is a
+  confirmed read surface. (A `null` value means the device knows the key but isn't reporting
+  it in the current state -- many are state-dependent, e.g. `waterMode` only populates while
+  cleaning, station fields only when docked to an auto-empty station.)
+- WRITE discovery: `set -> read-back -> diff`. Send a candidate `(apn, payload)`, then read the
+  affected field via 10001 and compare. CRITICAL: the device returns `code:0` for accepted-
+  but-ignored writes (wrong key / non-surface apn), so `code:0` proves nothing -- only an
+  observable field change confirms a real control surface.
+
+Usage:
+    source ~/.ecovacs.env
+    uv run --frozen python tools/ngiot_capability_loop.py fields          # read vocabulary
+    uv run --frozen python tools/ngiot_capability_loop.py read a,b,c       # specific fields
+    uv run --frozen python tools/ngiot_capability_loop.py setcheck <apn> '<json>' <field>
+    uv run --frozen python tools/ngiot_capability_loop.py sweep <field> <val> <apn0> <apn1> [step]
+
+### Mapped so far (2026-06-28, device docked/idle)
+
+Confirmed NON-NULL read surfaces via 10001:
+  battery, chargeStatus, childLock, cleanArea, cleanCount, cleanTime, consumables (4
+  life-spans), error, fanMode, mopState, pauseSwitch, status, volume(=8), waterMode, workMode.
+New vs. what the profile wires today: **volume** and **childLock** are confirmed-real and
+not yet wired.
+
+Known-but-null right now (state-dependent; need the right device state to populate):
+  advancedMode, aiavoid, autoEmpty, borderSpin, carpetPressure, continuousClean,
+  dryingDuration, mopAutoWash, sound, speaker, stationInfo, stationStatus, stationType,
+  sweepMode, trueDetect, trueDetectAvoid, voiceReport.
+
+### Write-surface discovery status
+`set->read-back->diff` works and correctly rejects code:0 echoes. But the write-apn search
+space is large (apn x payload-key x value-shape). A `{volume:N}` sweep of 50000-50040
+found many code:0 (accept-and-ignore) and NO real change, so the volume *set* apn is not in
+that range / uses a different shape. There is no self-describing manifest field (apnList,
+supportApn, etc. all return null). So write mapping is feasible but slow by fuzzing;
+the app capture would still be the fast oracle for set-apns if the offline issue is solved.
