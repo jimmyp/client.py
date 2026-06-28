@@ -9,11 +9,12 @@ endpoint. All telemetry comes from a single comprehensive read
 Verified live against a real device (see ``tools/NGIOT_Q287S6_PROTOCOL.md``):
 state read, start/stop/pause, return-to-dock, set fan and set water.
 
-Not yet implemented for ngiot (vacuum control first): map, station telemetry,
-and the play-sound / custom / life-span-reset surfaces. The latter three are
-required by the capability schema, so they are wired to their legacy JSON
-commands as structural placeholders -- they are NOT verified on q287s6 and will
-be ported to ngiot once their surfaces are captured.
+Not yet implemented for ngiot (vacuum control first): map and station telemetry.
+The play-sound / custom / life-span-reset slots are required by the capability
+schema but have no captured ngiot surface, so they use the explicit
+``commands.ngiot.unsupported`` stubs: they make no network call, report the
+device as not reached, and log a warning. They will be swapped for real ngiot
+commands once their surfaces are captured.
 """
 
 from __future__ import annotations
@@ -32,12 +33,14 @@ from deebot_client.capabilities import (
     CapabilityWater,
     DeviceType,
 )
-from deebot_client.commands.json.custom import CustomCommand
-from deebot_client.commands.json.life_span import ResetLifeSpan
-from deebot_client.commands.json.play_sound import PlaySound
 from deebot_client.commands.ngiot.clean import Charge, Clean
 from deebot_client.commands.ngiot.settings import SetFanSpeed, SetWaterAmount
 from deebot_client.commands.ngiot.state import GetState
+from deebot_client.commands.ngiot.unsupported import (
+    CustomCommand,
+    PlaySound,
+    ResetLifeSpan,
+)
 from deebot_client.const import DataType
 from deebot_client.events import (
     AvailabilityEvent,

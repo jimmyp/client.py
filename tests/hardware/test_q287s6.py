@@ -33,6 +33,25 @@ async def test_q287s6_is_recognised_as_a_vacuum() -> None:
     assert info.capabilities.device_type == DeviceType.VACUUM
 
 
+async def test_q287s6_unsupported_slots_use_ngiot_stubs() -> None:
+    # play_sound / custom / life-span reset have no captured ngiot surface, so
+    # they must use the explicit "not supported yet" ngiot stubs -- NOT the
+    # legacy JSON commands that POST to a transport this device ignores.
+    from deebot_client.commands.ngiot.unsupported import (
+        CustomCommand,
+        PlaySound,
+        ResetLifeSpan,
+    )
+
+    info = await hardware.get_static_device_info("q287s6")
+    assert info is not None
+    capabilities = info.capabilities
+
+    assert capabilities.play_sound.execute is PlaySound
+    assert capabilities.custom.set is CustomCommand
+    assert capabilities.life_span.reset is ResetLifeSpan
+
+
 async def test_q287s6_event_refresh_commands() -> None:
     info = await hardware.get_static_device_info("q287s6")
     assert info is not None
