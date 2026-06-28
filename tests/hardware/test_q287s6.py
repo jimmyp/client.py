@@ -7,6 +7,11 @@ from typing import TYPE_CHECKING
 from deebot_client import hardware
 from deebot_client.capabilities import DeviceType
 from deebot_client.commands.ngiot.state import GetState
+from deebot_client.commands.ngiot.unsupported import (
+    CustomCommand,
+    PlaySound,
+    ResetLifeSpan,
+)
 from deebot_client.events import (
     AvailabilityEvent,
     BatteryEvent,
@@ -37,12 +42,6 @@ async def test_q287s6_unsupported_slots_use_ngiot_stubs() -> None:
     # play_sound / custom / life-span reset have no captured ngiot surface, so
     # they must use the explicit "not supported yet" ngiot stubs -- NOT the
     # legacy JSON commands that POST to a transport this device ignores.
-    from deebot_client.commands.ngiot.unsupported import (
-        CustomCommand,
-        PlaySound,
-        ResetLifeSpan,
-    )
-
     info = await hardware.get_static_device_info("q287s6")
     assert info is not None
     capabilities = info.capabilities
