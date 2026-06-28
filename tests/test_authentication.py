@@ -9,6 +9,7 @@ import pytest
 
 from deebot_client.authentication import Authenticator, create_rest_config
 from deebot_client.models import Credentials
+from deebot_client.ngiot_client import NgiotClient
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -116,8 +117,6 @@ def test_config_override_rest_url(
 
 def test_ngiot_client_is_lazily_cached(rest_config: RestConfiguration) -> None:
     """The ngiot transport is created once and shares the auth session."""
-    from deebot_client.ngiot_client import NgiotClient
-
     authenticator = Authenticator(rest_config, "test", "test")
     client = authenticator.ngiot
     assert isinstance(client, NgiotClient)
