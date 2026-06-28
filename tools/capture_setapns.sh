@@ -55,17 +55,41 @@ adb shell settings delete global http_proxy >/dev/null 2>&1   # frida proxies in
 adb shell wm size 1080x1920 >/dev/null 2>&1; adb shell wm density 440 >/dev/null 2>&1
 echo "mitm listeners: $(lsof -iTCP:$PORT -sTCP:LISTEN 2>/dev/null | grep -c mitmdump)"
 
-say "5/6 spawn app under frida unpinning (Java-only; spawn-mode beats the load race)"
+say "5/6 spawn app under frida unpinning + watchdog (survives app restarts)"
+# The app RESTARTS when you enter the H5 control screen, which kills a plain
+# spawn-mode frida (and its endpoint/control calls then fail TLS, capturing
+# nothing). So: spawn once to seed hooks at launch, then a watchdog re-attaches
+# on every pid change so unpinning is ALWAYS live when you tap controls.
+FRIDA_SCRIPTS=(-l "$UNPIN/config.js"
+  -l "$UNPIN/android/android-proxy-override.js"
+  -l "$UNPIN/android/android-system-certificate-injection.js"
+  -l "$UNPIN/android/android-certificate-unpinning.js"
+  -l "$UNPIN/android/android-disable-root-detection.js")
+
 adb shell am force-stop "$PKG" 2>/dev/null; sleep 1
-nohup frida -U -f "$PKG" \
-  -l "$UNPIN/config.js" \
-  -l "$UNPIN/android/android-proxy-override.js" \
-  -l "$UNPIN/android/android-system-certificate-injection.js" \
-  -l "$UNPIN/android/android-certificate-unpinning.js" \
-  -l "$UNPIN/android/android-disable-root-detection.js" >/tmp/frida.out 2>&1 &
+nohup frida -U -f "$PKG" "${FRIDA_SCRIPTS[@]}" >/tmp/frida.out 2>&1 &
 sleep 14
-if grep -q "unpinning completed" /tmp/frida.out; then echo "unpinning active."; else
-  echo "WARN: unpinning not confirmed — check /tmp/frida.out"; fi
+grep -q "unpinning completed" /tmp/frida.out && echo "spawn unpinning active." \
+  || echo "WARN: spawn unpinning not confirmed — check /tmp/frida.out"
+
+# watchdog: re-attach whenever the app pid changes (i.e. after a restart)
+watchdog(){
+  local last=""
+  while true; do
+    adb shell pidof frida-server >/dev/null 2>&1 || { adb root >/dev/null 2>&1; sleep 1; adb shell setenforce 0 >/dev/null 2>&1; adb shell "nohup /data/local/tmp/frida-server >/dev/null 2>&1 &"; sleep 2; }
+    local pid; pid=$(adb shell pidof "$PKG" 2>/dev/null | tr -d '\r')
+    if [ -n "$pid" ] && [ "$pid" != "$last" ]; then
+      pkill -f "frida -U -p" 2>/dev/null; sleep 1
+      nohup frida -U -p "$pid" "${FRIDA_SCRIPTS[@]}" >/tmp/frida_wd.out 2>&1 &
+      sleep 8
+      grep -q "unpinning completed" /tmp/frida_wd.out 2>/dev/null && { echo "[watchdog] re-attached pid $pid"; last="$pid"; }
+    fi
+    sleep 3
+  done
+}
+watchdog & WD_PID=$!
+trap 'kill $WD_PID 2>/dev/null; pkill -f "frida -U" 2>/dev/null' EXIT
+echo "watchdog running (auto-reattaches on app restart)."
 
 say "6/6 CAPTURING — now drive the app, then Ctrl-C"
 cat <<'TIP'
