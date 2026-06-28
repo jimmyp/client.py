@@ -89,7 +89,7 @@ class NgiotClient:
             "User-Agent": _USER_AGENT,
         }
 
-        _LOGGER.debug("ngiot control apn=%s did=%s", apn, device_info["did"])
+        _LOGGER.debug("ngiot control apn=%s class=%s", apn, device_info["class"])
         async with self._session.post(
             url,
             params=params,

@@ -113,7 +113,7 @@ class SstAuthenticator:
             "Authorization": f"Bearer {credentials.token}",
             "Content-Type": "application/json; charset=utf-8",
         }
-        _LOGGER.debug("Minting SST for device %s", did)
+        _LOGGER.debug("Minting SST for device class %s", cls)
         async with self._session.post(
             url, json=payload, headers=headers, timeout=_TIMEOUT
         ) as res:
