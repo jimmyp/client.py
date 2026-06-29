@@ -41,6 +41,12 @@ adb wait-for-device
 until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; do sleep 2; done
 echo "booted."
 
+say "1a/6 force wifi/data ON (AVD can persist wifi-off from a prior airplane toggle"
+# -> 'Network is unreachable' / wlan0 DOWN / no IP. Re-enabling brings wlan0 up.
+adb shell svc wifi enable >/dev/null 2>&1
+adb shell svc data enable >/dev/null 2>&1
+sleep 5
+
 say "1b/6 wait for network to actually validate (not just boot)"
 # The app times out if it fires requests before connectivity is VALIDATED.
 # Wait for a validated default network (public DNS reachable), up to ~60s.
