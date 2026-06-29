@@ -25,12 +25,14 @@ S=emulator-5554
 
 say(){ printf '\n=== %s ===\n' "$*"; }
 
-say "1/6 boot emulator (visible window, host GPU)"
+say "1/6 boot emulator (visible window)"
 if ! adb devices | grep -q "$S"; then
-  # Tuned for a fast host: more cores/RAM, host GPU, no audio/snapshot overhead,
-  # full network speed + no simulated latency for reliability.
+  # Tuned for a fast host: more cores/RAM, no audio/snapshot overhead, full
+  # network speed + no simulated latency. GPU=swiftshader_indirect (software):
+  # slower than -gpu host but STABLE — host GPU crashed rendering the H5 control
+  # screen (Vulkan/Chromium context loss). Override with EMU_GPU=host to retry.
   "$ANDROID_HOME/emulator/emulator" -avd "$AVD" -writable-system \
-    -gpu host -cores 6 -memory 6144 \
+    -gpu "${EMU_GPU:-swiftshader_indirect}" -cores 6 -memory 6144 \
     -no-boot-anim -no-audio -no-snapshot \
     -netspeed full -netdelay none \
     >/tmp/emu.log 2>&1 &
