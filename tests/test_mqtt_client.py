@@ -393,8 +393,13 @@ def test_config(
         assert config.ssl_context is None
 
 
-def test_default_mqtt_443_verifies_against_ecovacs_ca() -> None:
-    """The default port-443 Ecovacs broker uses a private 'ECOVACS CA'.
+def test_default_mqtt_443_ssl_context_configured_to_verify_ecovacs_ca() -> None:
+    """The default port-443 SSL context is built to verify the ECOVACS CA.
+
+    This asserts the context is CONFIGURED correctly -- it does not open a
+    socket, so it does not prove a TLS handshake actually succeeds. (The real
+    handshake against mq-*.ecouser.net needs network and lives outside CI; it
+    was what caught the VERIFY_X509_STRICT bug guarded below.)
 
     Historically this path disabled verification entirely (CERT_NONE), which
     accepts ANY certificate (MITM-able). Instead it must verify the chain
