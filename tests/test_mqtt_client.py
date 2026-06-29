@@ -393,6 +393,25 @@ def test_config(
         assert config.ssl_context is None
 
 
+def test_default_mqtt_443_verifies_against_ecovacs_ca() -> None:
+    """The default port-443 Ecovacs broker uses a private 'ECOVACS CA'.
+
+    Historically this path disabled verification entirely (CERT_NONE), which
+    accepts ANY certificate (MITM-able). Instead it must verify the chain
+    against the bundled ECOVACS CA. Hostname checking stays off because the
+    broker cert's SANs do not cover every regional broker hostname.
+    """
+    config = create_mqtt_config(device_id="test", country="IT")
+    ctx = config.ssl_context
+    assert isinstance(ctx, ssl.SSLContext)
+    # Must actually verify the chain (the security fix) ...
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    # ... but not hostname (SANs don't cover all broker hosts).
+    assert ctx.check_hostname is False
+    # And it must trust the ECOVACS CA (some cert is loaded).
+    assert ctx.get_ca_certs(), "expected the ECOVACS CA to be loaded"
+
+
 @pytest.mark.parametrize(
     ("override_mqtt_url", "error_msg"),
     [

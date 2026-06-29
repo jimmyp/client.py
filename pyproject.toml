@@ -78,6 +78,8 @@ test = [
 features = ["pyo3/extension-module"]
 module-name = "deebot_client.rs"
 auditwheel = "repair"
+# Bundled Ecovacs MQTT CA must ship in sdist+wheel (loaded via importlib.resources).
+include = [{ path = "deebot_client/certs/*.pem", format = ["sdist", "wheel"] }]
 exclude = [
     { path = "**/.*/**", format = "sdist" },
     { path = "**/.*", format = "sdist" },
