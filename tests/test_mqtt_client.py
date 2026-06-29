@@ -408,8 +408,23 @@ def test_default_mqtt_443_verifies_against_ecovacs_ca() -> None:
     assert ctx.verify_mode == ssl.CERT_REQUIRED
     # ... but not hostname (SANs don't cover all broker hosts).
     assert ctx.check_hostname is False
-    # And it must trust the ECOVACS CA (some cert is loaded).
-    assert ctx.get_ca_certs(), "expected the ECOVACS CA to be loaded"
+    # The loaded CA must specifically be the ECOVACS CA, not just "some" cert.
+    cas = ctx.get_ca_certs()
+    assert cas, "expected the ECOVACS CA to be loaded"
+    subjects = {
+        name: value
+        for ca in cas
+        for rdn in ca["subject"]
+        for (name, value) in rdn
+    }
+    assert subjects.get("commonName") == "ECOVACS CA"
+    assert subjects.get("organizationName") == "ecovacs"
+    # The ECOVACS CA omits the Authority Key Identifier, so RFC5280-strict
+    # verification (Python's default since 3.13) would reject the REAL broker
+    # cert -- breaking every connection. This flag MUST be off, or the "fix"
+    # is worse than the CERT_NONE it replaced. (Regression guard: a flag-only
+    # test missed this; only a live handshake against mq-eu.ecouser.net caught it.)
+    assert not (ctx.verify_flags & ssl.VERIFY_X509_STRICT)
 
 
 @pytest.mark.parametrize(

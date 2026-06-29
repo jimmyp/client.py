@@ -49,6 +49,12 @@ def _ecovacs_ssl_context() -> ssl.SSLContext:
     ca = resources.files("deebot_client.certs").joinpath("ecovacs_ca.pem")
     ctx = ssl.create_default_context(cadata=ca.read_text("ascii"))
     ctx.check_hostname = False
+    # The ECOVACS CA cert is not RFC 5280 compliant (it omits the Authority Key
+    # Identifier extension), so Python's default VERIFY_X509_STRICT rejects it
+    # with "Missing Authority Key Identifier". Drop just that strict flag --
+    # CERT_REQUIRED chain verification stays on (a cert not signed by this CA is
+    # still rejected), we only stop enforcing the RFC extension the CA omits.
+    ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
     return ctx
 
 
