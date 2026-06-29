@@ -1,3 +1,5 @@
+"""ngiot command base tests."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

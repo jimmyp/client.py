@@ -1,20 +1,4 @@
-"""ngiot (next-generation IoT) endpoint/control transport.
-
-``eco-ng`` devices such as the DEEBOT NEO 2.0 PLUS (``q287s6``) are not driven
-through the legacy ``iot/devmanager.do`` portal endpoint. They use a separate
-``endpoint/control`` API hosted on the device's ``service.mqs`` host, with a
-short-lived :mod:`SST <deebot_client.sst_authentication>` bearer token.
-
-Host note (fixes DeebotUniverse/client.py#1569): the control call MUST target
-the ``service.mqs`` host (``api-ngiot.dc-<region>.ww.ecouser.net``). The
-``api-base`` host -- which is correct for *minting* the SST -- returns HTTP 404
-for ``endpoint/control`` in the NA region.
-
-A control request addresses a numeric *surface id* (``apn``) rather than a
-command name. Reads send ``{"fields": [...]}`` and writes send ``{key: value}``
-as ``body.data``; the response mirrors the request with the result under
-``body.data``.
-"""
+"""ngiot endpoint/control transport."""
 
 from __future__ import annotations
 
@@ -37,7 +21,6 @@ _LOGGER = get_logger(__name__)
 
 NGIOT_ENDPOINT_CONTROL_PATH = "/api/iot/endpoint/control"
 NGIOT_PROTOCOL_VERSION = "0.0.22"
-# okhttp UA mirrors the official Android client; some hosts are picky about it.
 _USER_AGENT = "okhttp/4.9.1"
 _TIMEOUT = ClientTimeout(60)
 
@@ -54,8 +37,9 @@ class NgiotClient:
     async def control(
         self, *, device_info: ApiDeviceInfo, apn: int | str, data: dict[str, Any]
     ) -> dict[str, Any]:
-        """Send a control call to a numeric surface (``apn``) and return the response."""
+        """Send a control call to a numeric surface (apn) and return the response."""
         sst = await self._sst.async_get_token(device_info)
+        # control uses the service.mqs host; api-base returns 404 for it
         host: str = device_info["service"]["mqs"]  # type: ignore[typeddict-item]
         url = f"https://{host}{NGIOT_ENDPOINT_CONTROL_PATH}"
 

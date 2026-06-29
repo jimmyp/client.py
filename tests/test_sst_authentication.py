@@ -1,8 +1,8 @@
-"""Tests for the ngiot SST (short-lived service token) authenticator."""
+"""ngiot SST authentication tests."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import orjson
@@ -11,13 +11,8 @@ from testfixtures import LogCapture
 
 from deebot_client.authentication import Authenticator
 from deebot_client.models import ApiDeviceInfo, Credentials
-from deebot_client.sst_authentication import (
-    SST_ISSUE_PATH,
-    SstAuthenticator,
-)
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
+from deebot_client.sst_authentication import SST_ISSUE_PATH, SstAuthenticator
+from tests.ngiot_fakes import FakeResponse, FakeSession
 
 _ACCOUNT_TOKEN = "ACCOUNT_TOKEN_SECRET"  # noqa: S105
 _SST = "SST.eyJhbGciOiJIUzI1NiJ9.payload.signature"
@@ -36,38 +31,8 @@ def _device_info() -> ApiDeviceInfo:
     return info  # type: ignore[return-value]
 
 
-class _FakeResponse:
-    def __init__(self, payload: bytes, status: int = 200) -> None:
-        self._payload = payload
-        self.status = status
-
-    async def read(self) -> bytes:
-        return self._payload
-
-    def raise_for_status(self) -> None:
-        if self.status >= 400:
-            msg = f"HTTP {self.status}"
-            raise RuntimeError(msg)
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, *_: object) -> bool:
-        return False
-
-
-class _FakeSession:
-    def __init__(self, responses: Sequence[_FakeResponse]) -> None:
-        self._responses = list(responses)
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    def post(self, url: str, **kwargs: Any) -> _FakeResponse:
-        self.calls.append((url, kwargs))
-        return self._responses.pop(0)
-
-
-def _issue_response(token: str = _SST) -> _FakeResponse:
-    return _FakeResponse(orjson.dumps({"code": 0, "data": {"data": {"token": token}}}))
+def _issue_response(token: str = _SST) -> FakeResponse:
+    return FakeResponse(orjson.dumps({"code": 0, "data": {"data": {"token": token}}}))
 
 
 def _authenticator() -> Authenticator:
@@ -79,7 +44,7 @@ def _authenticator() -> Authenticator:
 
 
 async def test_mints_token_with_minimal_control_scope() -> None:
-    session = _FakeSession([_issue_response()])
+    session = FakeSession([_issue_response()])
     sst = SstAuthenticator(_authenticator(), session)
 
     token = await sst.async_get_token(_device_info())
@@ -87,32 +52,29 @@ async def test_mints_token_with_minimal_control_scope() -> None:
     assert token == _SST
     assert len(session.calls) == 1
     url, kwargs = session.calls[0]
-    # SST is minted on the api-base host (NOT the mqs host)
     assert url == f"https://api-base.dc-na.ww.ecouser.net{SST_ISSUE_PATH}"
-    # Account token carried as bearer, never the SST
     assert kwargs["headers"]["Authorization"] == f"Bearer {_ACCOUNT_TOKEN}"
     payload = kwargs["json"]
     assert payload["sub"] == "user-9"
     assert payload["exp"] == 600
     policy = payload["acl"][0]["policy"][0]
-    # Minimal scope: Control on the single endpoint only
     assert policy["obj"] == [f"Endpoint:q287s6:{_DID}"]
     assert policy["perms"] == ["Control"]
 
 
 async def test_caches_token_per_device() -> None:
-    session = _FakeSession([_issue_response(), _issue_response("SST.second")])
+    session = FakeSession([_issue_response(), _issue_response("SST.second")])
     sst = SstAuthenticator(_authenticator(), session)
 
     first = await sst.async_get_token(_device_info())
     second = await sst.async_get_token(_device_info())
 
     assert first == second == _SST
-    assert len(session.calls) == 1  # second call served from cache
+    assert len(session.calls) == 1
 
 
 async def test_invalidate_forces_remint() -> None:
-    session = _FakeSession([_issue_response(), _issue_response("SST.second")])
+    session = FakeSession([_issue_response(), _issue_response("SST.second")])
     sst = SstAuthenticator(_authenticator(), session)
 
     await sst.async_get_token(_device_info())
@@ -124,12 +86,11 @@ async def test_invalidate_forces_remint() -> None:
 
 
 async def test_expired_token_is_reminted() -> None:
-    session = _FakeSession([_issue_response(), _issue_response("SST.second")])
+    session = FakeSession([_issue_response(), _issue_response("SST.second")])
     sst = SstAuthenticator(_authenticator(), session)
 
     with patch("deebot_client.sst_authentication.time.time", return_value=1000.0):
         await sst.async_get_token(_device_info())
-    # Far in the future, beyond the cached TTL
     with patch("deebot_client.sst_authentication.time.time", return_value=1_000_000.0):
         second = await sst.async_get_token(_device_info())
 
@@ -138,7 +99,7 @@ async def test_expired_token_is_reminted() -> None:
 
 
 async def test_token_is_never_logged() -> None:
-    session = _FakeSession([_issue_response()])
+    session = FakeSession([_issue_response()])
     sst = SstAuthenticator(_authenticator(), session)
 
     with LogCapture() as log:
@@ -150,7 +111,7 @@ async def test_token_is_never_logged() -> None:
 
 
 def test_missing_service_block_raises() -> None:
-    session = _FakeSession([_issue_response()])
+    session = FakeSession([_issue_response()])
     sst = SstAuthenticator(_authenticator(), session)
     info: ApiDeviceInfo = {  # type: ignore[typeddict-item]
         "class": "q287s6",

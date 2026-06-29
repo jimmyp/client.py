@@ -417,10 +417,7 @@ def test_default_mqtt_443_ssl_context_configured_to_verify_ecovacs_ca() -> None:
     cas = ctx.get_ca_certs()
     assert cas, "expected the ECOVACS CA to be loaded"
     subjects = {
-        name: value
-        for ca in cas
-        for rdn in ca["subject"]
-        for (name, value) in rdn
+        name: value for ca in cas for rdn in ca["subject"] for (name, value) in rdn
     }
     assert subjects.get("commonName") == "ECOVACS CA"
     assert subjects.get("organizationName") == "ecovacs"

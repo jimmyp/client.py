@@ -1,3 +1,5 @@
+"""ngiot clean and charge command tests."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -43,8 +45,7 @@ async def test_Clean_actions(
 
 
 async def test_Charge_returns_to_dock() -> None:
-    # Captured live from the app + confirmed on device:
-    # apn 40013 {chargeSwitch: true} == return to dock (-> status "goCharge").
+    # apn 40013 {chargeSwitch: true} == return to dock
     await assert_ngiot_command(
         Charge(),
         _OK,

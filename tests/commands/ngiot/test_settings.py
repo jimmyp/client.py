@@ -1,3 +1,5 @@
+"""ngiot fan, water, volume and child-lock set command tests."""
+
 from __future__ import annotations
 
 from typing import Any

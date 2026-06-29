@@ -1,10 +1,4 @@
-"""Tests for the ngiot 'not supported yet' stub commands.
-
-These cover capability slots that q287s6 requires by schema but for which no
-real ngiot ``endpoint/control`` surface has been captured. The stubs must NOT
-hit the network (neither the ngiot transport nor the legacy portal), must
-report the device as not reached, and must log a clear warning.
-"""
+"""ngiot unsupported-stub command tests."""
 
 from __future__ import annotations
 
@@ -62,14 +56,11 @@ async def test_unsupported_stub_makes_no_network_call_and_warns(
     with caplog.at_level(logging.WARNING):
         result = await command.execute(auth, _device_info(), event_bus)
 
-    # No network: neither the ngiot transport nor the legacy portal is touched.
     ngiot.control.assert_not_awaited()
     auth.post_authenticated.assert_not_awaited()
 
-    # The device was not reached (the stub did nothing real).
     assert result.device_reached is False
 
-    # And it said so, clearly, naming the device class.
     assert any(
         "not supported" in r.message.lower() and "q287s6" in r.message
         for r in caplog.records

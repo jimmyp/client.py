@@ -1,9 +1,4 @@
-"""q287s6 set commands for fan, water, volume and child lock.
-
-Wire-verified set surfaces (see ``tools/NGIOT_Q287S6_PROTOCOL.md``): fan suction
-(apn 50011), water level (apn 50013), volume (apn 50023) and child lock
-(apn 50038). Each is linked to :class:`GetState` for optimistic event updates.
-"""
+"""q287s6 fan, water, volume and child-lock set commands."""
 
 from __future__ import annotations
 
@@ -20,7 +15,7 @@ from .state import (
 
 
 class SetFanSpeed(NgiotSetCommand):
-    """Set the fan/suction mode (apn 50011)."""
+    """Set fan speed command."""
 
     NAME = "setFanMode"
     APN = 50011
@@ -37,7 +32,7 @@ class SetFanSpeed(NgiotSetCommand):
 
 
 class SetWaterAmount(NgiotSetCommand):
-    """Set the water flow level (apn 50013)."""
+    """Set water amount command."""
 
     NAME = "setWaterMode"
     APN = 50013
@@ -54,7 +49,7 @@ class SetWaterAmount(NgiotSetCommand):
 
 
 class SetVolume(NgiotSetCommand):
-    """Set the announcement volume (apn 50023)."""
+    """Set volume command."""
 
     NAME = "setVolume"
     APN = 50023
@@ -69,7 +64,7 @@ class SetVolume(NgiotSetCommand):
 
 
 class SetChildLock(NgiotSetCommand):
-    """Enable or disable the child lock (apn 50038)."""
+    """Set child lock command."""
 
     NAME = "setChildLock"
     APN = 50038

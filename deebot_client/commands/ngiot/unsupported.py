@@ -1,15 +1,4 @@
-"""'Not supported yet' stubs for q287s6 capability slots without an ngiot surface.
-
-Some capabilities are required by the :class:`~deebot_client.capabilities.Capabilities`
-schema but have no captured ngiot ``endpoint/control`` surface on q287s6 (e.g.
-the generic custom command). Wiring them to their legacy JSON commands would
-POST to ``iot/devmanager.do`` -- a transport these ``eco-ng`` devices do not
-answer on -- so the call would fail silently after a pointless round-trip.
-
-These stubs make that explicit instead: they perform no network request, report
-the device as not reached, and log a clear warning. Swap a stub for a real
-:mod:`deebot_client.commands.ngiot` command once its surface is captured.
-"""
+"""Stubs for capabilities without a captured ngiot surface yet."""
 
 from __future__ import annotations
 
@@ -59,7 +48,7 @@ class _UnsupportedCommand(Command, ABC):
 
 
 class CustomCommand(_UnsupportedCommand):
-    """Custom command escape hatch -- not routable over ngiot yet."""
+    """Custom command."""
 
     NAME = "CustomCommand"
 

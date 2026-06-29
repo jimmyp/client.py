@@ -1,11 +1,4 @@
-"""Base classes for ngiot (endpoint/control) commands.
-
-An ngiot command addresses a *numeric surface id* (``apn``) on the device via
-:meth:`deebot_client.ngiot_client.NgiotClient.control`, rather than a named
-``cmdName`` on the legacy portal endpoint. Reads send ``{"fields": [...]}`` and
-writes send ``{key: value}`` as ``body.data``; the response carries the result
-under ``body.data`` and an envelope ``code``/``msg`` indicating success.
-"""
+"""Base ngiot commands."""
 
 from __future__ import annotations
 
@@ -31,8 +24,7 @@ if TYPE_CHECKING:
 
 _LOGGER = get_logger(__name__)
 
-# endpoint/control reports being unreachable with this errno (mirrors the
-# legacy "bot offline" code so the device-availability logic keeps working).
+# bot offline
 _OFFLINE_CODE = 4200
 
 
@@ -57,7 +49,6 @@ class NgiotCommand(CommandWithMessageHandling, MessageBody, ABC):
         return super().__init_subclass__()
 
     def _get_payload(self) -> dict[str, Any]:
-        """Return the body.data payload (field-query for reads, key/value for writes)."""
         return self._args if isinstance(self._args, dict) else {}
 
     async def _execute_api_request(
@@ -79,7 +70,7 @@ class NgiotCommand(CommandWithMessageHandling, MessageBody, ABC):
             event_bus.notify(AvailabilityEvent(available=False))
             return HandlingResult(HandlingState.FAILED)
 
-        _LOGGER.warning('Command "%s" was not successful (code=%s).', self.NAME, code)
+        _LOGGER.warning('Command "%s" was not successfully. code=%s', self.NAME, code)
         return HandlingResult(HandlingState.FAILED)
 
     def _handle_ok(
@@ -105,7 +96,7 @@ class NgiotGetCommand(NgiotCommand, MessageBodyDataDict, GetCommand, ABC):
     def handle_set_args(
         cls, event_bus: EventBus, args: dict[str, Any]
     ) -> HandlingResult:
-        """Handle arguments of the corresponding set command (optimistic update)."""
+        """Handle arguments of set command."""
         return cls._handle_body_data_dict(event_bus, args)
 
 
@@ -122,7 +113,6 @@ class NgiotExecuteCommand(NgiotCommand, ABC):
 
     @classmethod
     def _handle_body(cls, _: EventBus, _body: dict[str, Any]) -> HandlingResult:
-        # body.data carries no telemetry for writes; success is the envelope.
         return HandlingResult.success()
 
 

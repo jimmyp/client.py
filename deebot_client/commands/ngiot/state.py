@@ -1,15 +1,4 @@
-"""q287s6 state command (apn 10001 comprehensive field read).
-
-A single ``endpoint/control`` read of surface ``10001`` returns the bulk of the
-device telemetry as a flat ``body.data`` dict. This command fans those fields
-out to the individual events the rest of the library consumes.
-
-Verified against the live capture in ``tools/NGIOT_Q287S6_PROTOCOL.md``:
-battery, fanMode, waterMode, mopState, error and consumables all parse from the
-real response. The vacuum *state* mapping (idle/clean/return/dock/error/pause)
-is best-effort -- only the unambiguous transitions are emitted; see
-``_determine_state``.
-"""
+"""q287s6 state command (apn 10001)."""
 
 from __future__ import annotations
 
@@ -44,7 +33,7 @@ if TYPE_CHECKING:
 
 _LOGGER = get_logger(__name__)
 
-# Fields requested in the comprehensive state read.
+# fields requested in the state read
 STATE_FIELDS = [
     "battery",
     "chargeStatus",
@@ -62,10 +51,7 @@ STATE_FIELDS = [
     "childLock",
 ]
 
-# ngiot fanMode <-> FanSpeedLevel. Wire-verified live on q287s6 from the app:
-# "auto" (device default), "quiet", "strong", "max". "auto" is the adaptive mode
-# with no dedicated FanSpeedLevel, so it maps to NORMAL (the neutral middle).
-# "standard"/"normal" were never observed and are kept only as defensive aliases.
+# ngiot fanMode <-> FanSpeedLevel ("auto" has no dedicated level -> NORMAL)
 NGIOT_FAN_MODE_TO_LEVEL = {
     "auto": FanSpeedLevel.NORMAL,
     "quiet": FanSpeedLevel.QUIET,
@@ -81,9 +67,7 @@ NGIOT_LEVEL_TO_FAN_MODE = {
     FanSpeedLevel.MAX_PLUS: "max",
 }
 
-# ngiot waterMode <-> WaterAmount. Wire-verified live on q287s6 from the app:
-# "low", "mid" (NOT "medium"), "high". "ultraHigh" was never observed and is
-# kept only as a defensive alias.
+# ngiot waterMode <-> WaterAmount (wire value is "mid", not "medium")
 NGIOT_WATER_MODE_TO_AMOUNT = {
     "low": WaterAmount.LOW,
     "mid": WaterAmount.MEDIUM,
@@ -104,10 +88,7 @@ NGIOT_CONSUMABLE_TO_LIFESPAN = {
     "filter": LifeSpan.FILTER,
     "unitCare": LifeSpan.UNIT_CARE,
 }
-# LifeSpan component -> ngiot consumable type, for the resetConsumable write
-# (apn 50017). The LifeSpan enum values do NOT match the device's consumable
-# names -- LifeSpan.BRUSH maps to rollBrush and LifeSpan.FILTER to filter, not
-# their enum values -- so this is an explicit map; do NOT use life_span.value.
+# LifeSpan -> ngiot consumable type for the reset write (values differ from the enum)
 NGIOT_LIFESPAN_TO_CONSUMABLE = {
     LifeSpan.BRUSH: "rollBrush",
     LifeSpan.FILTER: "filter",
@@ -145,7 +126,7 @@ def _determine_state(data: dict[str, Any], error_code: int | None) -> State | No
 
 
 class GetState(NgiotGetCommand):
-    """Read the comprehensive q287s6 device state (apn 10001)."""
+    """Get state command."""
 
     NAME = "getState"
     APN = 10001

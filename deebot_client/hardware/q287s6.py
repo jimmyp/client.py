@@ -1,21 +1,4 @@
-"""DEEBOT NEO 2.0 PLUS (q287s6) capabilities.
-
-This is the first ``eco-ng`` / ngiot device wired into the library: it is driven
-through the ``endpoint/control`` transport (see :mod:`deebot_client.ngiot_client`)
-addressing numeric ``apn`` surfaces, not the legacy ``iot/devmanager.do`` portal
-endpoint. All telemetry comes from a single comprehensive read
-(:class:`~deebot_client.commands.ngiot.state.GetState`, apn 10001).
-
-Verified live against a real device (see ``tools/NGIOT_Q287S6_PROTOCOL.md``):
-state read, start/stop/pause, return-to-dock, set fan, set water, set volume,
-set child lock, play-sound / locate and life-span reset.
-
-Not yet implemented for ngiot (vacuum control first): map and station telemetry.
-The custom-command slot is required by the capability schema but has no captured
-ngiot surface, so it uses the explicit ``commands.ngiot.unsupported`` stub: it
-makes no network call, reports the device as not reached, and logs a warning. It
-will be swapped for a real ngiot command once its surface is captured.
-"""
+"""DEEBOT NEO 2.0 PLUS (q287s6) Capabilities."""
 
 from __future__ import annotations
 

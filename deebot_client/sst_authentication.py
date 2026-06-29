@@ -1,21 +1,4 @@
-"""SST (short-lived service token) authentication for ngiot devices.
-
-ECOVACS' next-generation IoT transport ("ngiot", used by ``eco-ng`` devices
-such as the DEEBOT NEO 2.0 PLUS / ``q287s6``) does not authenticate
-``endpoint/control`` calls with the long-lived account token. Instead a
-short-lived, narrowly-scoped *service token* (``SST``) is minted per device and
-presented as the bearer token for control calls.
-
-Security properties enforced here:
-
-* **Minimal scope** -- the token is requested with ``Control`` permission on the
-  single ``Endpoint:<class>:<did>`` only, and a short ``exp`` (10 minutes).
-* **Hygiene** -- tokens are cached per-device in memory only, refreshed before
-  expiry, can be invalidated on auth failure, and are *never* written to logs.
-* **Real TLS** -- minting goes through the shared :class:`aiohttp.ClientSession`,
-  which validates the server certificate chain by default. We never disable
-  certificate or hostname verification.
-"""
+"""SST (short-lived service token) authentication for ngiot devices."""
 
 from __future__ import annotations
 
@@ -38,10 +21,9 @@ if TYPE_CHECKING:
 _LOGGER = get_logger(__name__)
 
 SST_ISSUE_PATH = "/api/new-perm/token/sst/issue"
-# Requested validity of the minted token, in seconds (matches the official app).
+# token validity in seconds
 SST_EXP_SECONDS = 600
-# Refresh ahead of expiry so an in-flight control call never carries a token
-# that the server has already rejected.
+# refresh before expiry
 _SST_REFRESH_RATIO = 0.9
 _TIMEOUT = ClientTimeout(60)
 
@@ -81,12 +63,7 @@ class SstAuthenticator:
 
     @staticmethod
     def _sst_issue_base_url(device_info: ApiDeviceInfo) -> str:
-        """Derive the api-base host that issues SST tokens for this device.
-
-        SST is minted on the ``api-base`` host, derived from the device's
-        ``service.mqs`` host (e.g. ``api-ngiot.dc-na.ww.ecouser.net`` ->
-        ``https://api-base.dc-na.ww.ecouser.net``).
-        """
+        # SST is minted on the api-base host, derived from service.mqs
         mqs: str = device_info["service"]["mqs"]  # type: ignore[typeddict-item]
         if mqs.startswith("api-ngiot."):
             return "https://api-base." + mqs.split(".", 1)[1]

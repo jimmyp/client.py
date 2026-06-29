@@ -1,11 +1,4 @@
-"""q287s6 clean action and charge commands.
-
-Action surfaces captured live from the official app and confirmed against a
-real device (see ``tools/NGIOT_Q287S6_PROTOCOL.md``):
-start (40008), stop (40002), pause (40009 ``pauseSwitch:true``), resume
-(40011 ``pauseSwitch:false`` -- a SEPARATE apn from pause) and return-to-dock
-(40013 ``chargeSwitch:true``).
-"""
+"""q287s6 clean and charge commands."""
 
 from __future__ import annotations
 
@@ -29,7 +22,7 @@ _CLEAN_ACTIONS: dict[CleanAction, tuple[int, dict[str, Any], State]] = {
     ),
     CleanAction.STOP: (40002, {"cleanSwitch": False}, State.IDLE),
     CleanAction.PAUSE: (40009, {"pauseSwitch": True}, State.PAUSED),
-    # Resume is a distinct surface (40011), not 40009 with the flag inverted.
+    # resume is its own apn (40011), not 40009 inverted
     CleanAction.RESUME: (40011, {"pauseSwitch": False}, State.CLEANING),
 }
 
@@ -54,7 +47,7 @@ class Clean(NgiotExecuteCommand):
 
 
 class Charge(NgiotExecuteCommand):
-    """Return the bot to its charging dock (apn 40013, ``chargeSwitch:true``)."""
+    """Charge command."""
 
     NAME = "charge"
     APN = 40013

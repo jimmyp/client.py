@@ -1,3 +1,5 @@
+"""ngiot play-sound and life-span reset command tests."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -13,8 +15,7 @@ _OK: dict[str, Any] = {"header": {}, "body": {"data": None, "code": 0, "msg": "o
 
 
 async def test_PlaySound_locates_the_bot() -> None:
-    # Captured live from the app: apn 40019 {seek: true}. Momentary action with
-    # no telemetry to parse back -> success is the envelope code, no events.
+    # apn 40019 {seek: true}; momentary action, no events
     await assert_ngiot_command(
         PlaySound(),
         _OK,
@@ -27,8 +28,7 @@ async def test_PlaySound_locates_the_bot() -> None:
 @pytest.mark.parametrize(
     ("life_span", "expected_consumable"),
     [
-        # The wire type strings come from the explicit LifeSpan->name map, NOT
-        # life_span.value (LifeSpan.BRUSH.value is "brush", FILTER.value is "heap").
+        # wire type comes from the explicit map, not life_span.value
         (LifeSpan.BRUSH, "rollBrush"),
         (LifeSpan.FILTER, "filter"),
         (LifeSpan.SIDE_BRUSH, "sideBrush"),
