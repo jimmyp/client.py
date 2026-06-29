@@ -11,18 +11,19 @@ from deebot_client import hardware
 from deebot_client.capabilities import DeviceType
 from deebot_client.command import Command
 from deebot_client.commands.json.common import JsonCommand
+from deebot_client.commands.ngiot.actions import PlaySound, ResetLifeSpan
 from deebot_client.commands.ngiot.common import NgiotCommand
+from deebot_client.commands.ngiot.settings import SetChildLock, SetVolume
 from deebot_client.commands.ngiot.state import GetState
 from deebot_client.commands.ngiot.unsupported import (
     CustomCommand,
-    PlaySound,
-    ResetLifeSpan,
     _UnsupportedCommand,
 )
 from deebot_client.commands.xml.common import XmlCommand
 from deebot_client.events import (
     AvailabilityEvent,
     BatteryEvent,
+    ChildLockEvent,
     CustomCommandEvent,
     ErrorEvent,
     FanSpeedEvent,
@@ -32,6 +33,7 @@ from deebot_client.events import (
     StateEvent,
     StatsEvent,
     TotalStatsEvent,
+    VolumeEvent,
 )
 from deebot_client.events.water_info import MopAttachedEvent, WaterAmountEvent
 
@@ -110,16 +112,29 @@ async def test_q287s6_is_recognised_as_a_vacuum() -> None:
 
 
 async def test_q287s6_unsupported_slots_use_ngiot_stubs() -> None:
-    # play_sound / custom / life-span reset have no captured ngiot surface, so
-    # they must use the explicit "not supported yet" ngiot stubs -- NOT the
-    # legacy JSON commands that POST to a transport this device ignores.
+    # custom has no captured ngiot surface, so it must use the explicit "not
+    # supported yet" ngiot stub -- NOT the legacy JSON command that POSTs to a
+    # transport this device ignores.
+    info = await hardware.get_static_device_info("q287s6")
+    assert info is not None
+    capabilities = info.capabilities
+
+    assert capabilities.custom.set is CustomCommand
+
+
+async def test_q287s6_captured_action_slots_use_real_ngiot_commands() -> None:
+    # play_sound (apn 40019) and life-span reset (apn 50017) now have captured
+    # ngiot surfaces, so they wire the real ngiot commands, not stubs.
     info = await hardware.get_static_device_info("q287s6")
     assert info is not None
     capabilities = info.capabilities
 
     assert capabilities.play_sound.execute is PlaySound
-    assert capabilities.custom.set is CustomCommand
     assert capabilities.life_span.reset is ResetLifeSpan
+    assert capabilities.settings.volume is not None
+    assert capabilities.settings.volume.set is SetVolume
+    assert capabilities.settings.child_lock is not None
+    assert capabilities.settings.child_lock.set is SetChildLock
 
 
 async def test_q287s6_event_refresh_commands() -> None:
@@ -131,6 +146,7 @@ async def test_q287s6_event_refresh_commands() -> None:
     expected: dict[type[Event], list[Command]] = {
         AvailabilityEvent: [GetState(is_available_check=True)],
         BatteryEvent: [GetState()],
+        ChildLockEvent: [GetState()],
         CustomCommandEvent: [],
         ErrorEvent: [GetState()],
         FanSpeedEvent: [GetState()],
@@ -141,6 +157,7 @@ async def test_q287s6_event_refresh_commands() -> None:
         StateEvent: [GetState()],
         StatsEvent: [],
         TotalStatsEvent: [],
+        VolumeEvent: [GetState()],
         WaterAmountEvent: [GetState()],
     }
     assert capabilities._events.keys() == expected.keys()

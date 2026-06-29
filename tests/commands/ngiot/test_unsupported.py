@@ -15,13 +15,8 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from deebot_client.authentication import Authenticator
-from deebot_client.commands.ngiot.unsupported import (
-    CustomCommand,
-    PlaySound,
-    ResetLifeSpan,
-)
+from deebot_client.commands.ngiot.unsupported import CustomCommand
 from deebot_client.event_bus import EventBus
-from deebot_client.events import LifeSpan
 from deebot_client.models import ApiDeviceInfo, Credentials
 
 if TYPE_CHECKING:
@@ -51,9 +46,7 @@ def _authenticator() -> tuple[Authenticator, Mock]:
 
 
 _STUBS = [
-    pytest.param(PlaySound(), "playSound", id="play-sound"),
     pytest.param(CustomCommand("getFoo"), "getFoo", id="custom"),
-    pytest.param(ResetLifeSpan(LifeSpan.BRUSH), "resetLifeSpan", id="lifespan-reset"),
 ]
 
 

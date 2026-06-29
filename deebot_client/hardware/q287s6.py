@@ -7,14 +7,14 @@ endpoint. All telemetry comes from a single comprehensive read
 (:class:`~deebot_client.commands.ngiot.state.GetState`, apn 10001).
 
 Verified live against a real device (see ``tools/NGIOT_Q287S6_PROTOCOL.md``):
-state read, start/stop/pause, return-to-dock, set fan and set water.
+state read, start/stop/pause, return-to-dock, set fan, set water, set volume,
+set child lock, play-sound / locate and life-span reset.
 
 Not yet implemented for ngiot (vacuum control first): map and station telemetry.
-The play-sound / custom / life-span-reset slots are required by the capability
-schema but have no captured ngiot surface, so they use the explicit
-``commands.ngiot.unsupported`` stubs: they make no network call, report the
-device as not reached, and log a warning. They will be swapped for real ngiot
-commands once their surfaces are captured.
+The custom-command slot is required by the capability schema but has no captured
+ngiot surface, so it uses the explicit ``commands.ngiot.unsupported`` stub: it
+makes no network call, reports the device as not reached, and logs a warning. It
+will be swapped for a real ngiot command once its surface is captured.
 """
 
 from __future__ import annotations
@@ -27,24 +27,29 @@ from deebot_client.capabilities import (
     CapabilityEvent,
     CapabilityExecute,
     CapabilityLifeSpan,
+    CapabilitySet,
+    CapabilitySetEnable,
     CapabilitySettings,
     CapabilitySetTypes,
     CapabilityStats,
     CapabilityWater,
     DeviceType,
 )
+from deebot_client.commands.ngiot.actions import PlaySound, ResetLifeSpan
 from deebot_client.commands.ngiot.clean import Charge, Clean
-from deebot_client.commands.ngiot.settings import SetFanSpeed, SetWaterAmount
-from deebot_client.commands.ngiot.state import GetState
-from deebot_client.commands.ngiot.unsupported import (
-    CustomCommand,
-    PlaySound,
-    ResetLifeSpan,
+from deebot_client.commands.ngiot.settings import (
+    SetChildLock,
+    SetFanSpeed,
+    SetVolume,
+    SetWaterAmount,
 )
+from deebot_client.commands.ngiot.state import GetState
+from deebot_client.commands.ngiot.unsupported import CustomCommand
 from deebot_client.const import DataType
 from deebot_client.events import (
     AvailabilityEvent,
     BatteryEvent,
+    ChildLockEvent,
     CustomCommandEvent,
     ErrorEvent,
     FanSpeedEvent,
@@ -56,6 +61,7 @@ from deebot_client.events import (
     StateEvent,
     StatsEvent,
     TotalStatsEvent,
+    VolumeEvent,
     water_info,
 )
 from deebot_client.models import StaticDeviceInfo
@@ -101,7 +107,12 @@ def get_device_info() -> StaticDeviceInfo:
             ),
             network=CapabilityEvent(NetworkInfoEvent, []),
             play_sound=CapabilityExecute(PlaySound),
-            settings=CapabilitySettings(),
+            settings=CapabilitySettings(
+                child_lock=CapabilitySetEnable(
+                    ChildLockEvent, [GetState()], SetChildLock
+                ),
+                volume=CapabilitySet(VolumeEvent, [GetState()], SetVolume),
+            ),
             state=CapabilityEvent(StateEvent, [GetState()]),
             stats=CapabilityStats(
                 clean=CapabilityEvent(StatsEvent, []),

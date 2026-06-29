@@ -18,12 +18,14 @@ from typing import TYPE_CHECKING, Any
 from deebot_client.const import ERROR_CODES
 from deebot_client.events import (
     BatteryEvent,
+    ChildLockEvent,
     ErrorEvent,
     FanSpeedEvent,
     FanSpeedLevel,
     LifeSpan,
     LifeSpanEvent,
     StateEvent,
+    VolumeEvent,
 )
 from deebot_client.events.station import State as StationState, StationEvent
 from deebot_client.events.water_info import (
@@ -56,6 +58,8 @@ STATE_FIELDS = [
     "status",
     "error",
     "consumables",
+    "volume",
+    "childLock",
 ]
 
 # ngiot fanMode <-> FanSpeedLevel. Wire-verified live on q287s6 from the app:
@@ -99,6 +103,16 @@ NGIOT_CONSUMABLE_TO_LIFESPAN = {
     "rollBrush": LifeSpan.BRUSH,
     "filter": LifeSpan.FILTER,
     "unitCare": LifeSpan.UNIT_CARE,
+}
+# LifeSpan component -> ngiot consumable type, for the resetConsumable write
+# (apn 50017). The LifeSpan enum values do NOT match the device's consumable
+# names -- LifeSpan.BRUSH maps to rollBrush and LifeSpan.FILTER to filter, not
+# their enum values -- so this is an explicit map; do NOT use life_span.value.
+NGIOT_LIFESPAN_TO_CONSUMABLE = {
+    LifeSpan.BRUSH: "rollBrush",
+    LifeSpan.FILTER: "filter",
+    LifeSpan.SIDE_BRUSH: "sideBrush",
+    LifeSpan.UNIT_CARE: "unitCare",
 }
 
 _STATUS_TO_STATE = {
@@ -180,7 +194,17 @@ class GetState(NgiotGetCommand):
         if isinstance(station_status, int) and not isinstance(station_status, bool):
             event_bus.notify(StationEvent(StationState(station_status)))
 
+        cls._notify_settings(event_bus, data)
+
         return HandlingResult.success()
+
+    @staticmethod
+    def _notify_settings(event_bus: EventBus, data: dict[str, Any]) -> None:
+        if (volume := data.get("volume")) is not None:
+            event_bus.notify(VolumeEvent(int(volume), maximum=None))
+
+        if (child_lock := data.get("childLock")) is not None:
+            event_bus.notify(ChildLockEvent(bool(child_lock)))
 
     @staticmethod
     def _notify_consumables(

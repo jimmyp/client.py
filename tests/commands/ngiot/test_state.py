@@ -6,12 +6,14 @@ from deebot_client.commands.ngiot.state import STATE_FIELDS, GetState
 from deebot_client.const import ERROR_CODES
 from deebot_client.events import (
     BatteryEvent,
+    ChildLockEvent,
     ErrorEvent,
     FanSpeedEvent,
     FanSpeedLevel,
     LifeSpan,
     LifeSpanEvent,
     StateEvent,
+    VolumeEvent,
 )
 from deebot_client.events.water_info import (
     MopAttachedEvent,
@@ -77,6 +79,7 @@ async def test_GetState_parses_full_captured_response() -> None:
             LifeSpanEvent(LifeSpan.BRUSH, 50.67, 9120),
             LifeSpanEvent(LifeSpan.FILTER, 84.67, 7620),
             LifeSpanEvent(LifeSpan.UNIT_CARE, 20.0, 360),
+            ChildLockEvent(False),
         ],
         expected_apn=10001,
         expected_data={"fields": STATE_FIELDS},
@@ -95,6 +98,18 @@ async def test_GetState_parses_live_default_fan_and_water() -> None:
             FanSpeedEvent(FanSpeedLevel.NORMAL),
             WaterAmountEvent(WaterAmount.MEDIUM),
         ],
+        expected_apn=10001,
+        expected_data={"fields": STATE_FIELDS},
+    )
+
+
+async def test_GetState_parses_volume_and_child_lock() -> None:
+    # volume and childLock are read back from the same comprehensive read (the
+    # set-apns 50023/50038 use this surface as their read oracle).
+    await assert_ngiot_command(
+        GetState(),
+        _response({"volume": 8, "childLock": True}),
+        [VolumeEvent(8, maximum=None), ChildLockEvent(True)],
         expected_apn=10001,
         expected_data={"fields": STATE_FIELDS},
     )

@@ -2,10 +2,9 @@
 
 Some capabilities are required by the :class:`~deebot_client.capabilities.Capabilities`
 schema but have no captured ngiot ``endpoint/control`` surface on q287s6 (e.g.
-play-sound, the life-span reset action, and the generic custom command). Wiring
-them to their legacy JSON commands would POST to ``iot/devmanager.do`` -- a
-transport these ``eco-ng`` devices do not answer on -- so the call would fail
-silently after a pointless round-trip.
+the generic custom command). Wiring them to their legacy JSON commands would
+POST to ``iot/devmanager.do`` -- a transport these ``eco-ng`` devices do not
+answer on -- so the call would fail silently after a pointless round-trip.
 
 These stubs make that explicit instead: they perform no network request, report
 the device as not reached, and log a clear warning. Swap a stub for a real
@@ -25,7 +24,6 @@ from deebot_client.message import HandlingResult, HandlingState
 if TYPE_CHECKING:
     from deebot_client.authentication import Authenticator
     from deebot_client.event_bus import EventBus
-    from deebot_client.events import LifeSpan
     from deebot_client.models import ApiDeviceInfo
 
 _LOGGER = get_logger(__name__)
@@ -60,12 +58,6 @@ class _UnsupportedCommand(Command, ABC):
         return HandlingResult(HandlingState.FAILED)
 
 
-class PlaySound(_UnsupportedCommand):
-    """Play-sound / locate -- no ngiot surface captured yet."""
-
-    NAME = "playSound"
-
-
 class CustomCommand(_UnsupportedCommand):
     """Custom command escape hatch -- not routable over ngiot yet."""
 
@@ -76,12 +68,3 @@ class CustomCommand(_UnsupportedCommand):
     ) -> None:
         self.NAME = name
         super().__init__(args)
-
-
-class ResetLifeSpan(_UnsupportedCommand):
-    """Life-span counter reset -- no ngiot surface captured yet."""
-
-    NAME = "resetLifeSpan"
-
-    def __init__(self, life_span: LifeSpan) -> None:
-        super().__init__({"type": life_span.value})

@@ -22,11 +22,17 @@ import orjson
 import pytest
 
 from deebot_client.authentication import Authenticator
+from deebot_client.commands.ngiot.actions import PlaySound, ResetLifeSpan
 from deebot_client.commands.ngiot.clean import Charge, Clean
-from deebot_client.commands.ngiot.settings import SetFanSpeed, SetWaterAmount
+from deebot_client.commands.ngiot.settings import (
+    SetChildLock,
+    SetFanSpeed,
+    SetVolume,
+    SetWaterAmount,
+)
 from deebot_client.commands.ngiot.state import GetState
 from deebot_client.event_bus import EventBus
-from deebot_client.events import FanSpeedLevel
+from deebot_client.events import FanSpeedLevel, LifeSpan
 from deebot_client.events.water_info import WaterAmount
 from deebot_client.models import ApiDeviceInfo, CleanAction, Credentials
 from deebot_client.ngiot_client import (
@@ -143,6 +149,23 @@ _WIRE_CONTRACT = [
         "50013",
         {"waterMode": "mid"},
         id="water-mid",
+    ),
+    pytest.param(SetVolume(8), "50023", {"volume": 8}, id="volume"),
+    pytest.param(PlaySound(), "40019", {"seek": True}, id="play-sound"),
+    pytest.param(SetChildLock(True), "50038", {"childLock": True}, id="child-lock"),
+    # The resetConsumable type comes from the explicit LifeSpan->name map, NOT
+    # life_span.value (LifeSpan.BRUSH.value is "brush", FILTER.value is "heap").
+    pytest.param(
+        ResetLifeSpan(LifeSpan.BRUSH),
+        "50017",
+        {"resetConsumable": "rollBrush"},
+        id="reset-brush",
+    ),
+    pytest.param(
+        ResetLifeSpan(LifeSpan.FILTER),
+        "50017",
+        {"resetConsumable": "filter"},
+        id="reset-filter",
     ),
 ]
 

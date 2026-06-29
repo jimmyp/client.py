@@ -128,3 +128,20 @@ Other write surfaces seen from the app (not yet wired): `30007 {expandedMapRepor
 Fan/water enum values actually emitted by the app (wire-verified):
 - fanMode: `auto` (default), `quiet`, `strong`, `max`
 - waterMode: `low`, `mid` (NOT "medium"), `high`
+
+## Update: 4 setting set-apns captured from the app (2026-06-29)
+
+Captured live via Frida-unpinned app + mitmproxy on the emulator (the rig finally worked
+after fixing screen size + reinstalling app/frida-server; the earlier "no network" was a
+broken in-guest curl test, not a real network failure). All returned code:0; values verified
+against the read oracle.
+
+| Command | apn | write payload | read-back field |
+|---|---|---|---|
+| Set volume | 50023 | `{"volume": <int 0..N>}` | `volume` |
+| Play sound / locate robot | 40019 | `{"seek": true}` | (momentary) |
+| Child lock | 50038 | `{"childLock": <bool>}` | `childLock` |
+| Reset consumable | 50017 | `{"resetConsumable": "<type>"}` | `consumables[].left` |
+
+`resetConsumable` types (from the consumables read surface): `sideBrush`, `rollBrush`,
+`filter`, `unitCare`.
