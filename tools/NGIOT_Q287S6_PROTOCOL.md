@@ -206,15 +206,35 @@ tx -> {"request":{"clientId":"<DN>&<PK>"},"system":{"time":"<ms>","version":"1.0
 rx <- {"code":200,"id":"6","message":"success"}
 ```
 
-### Still missing: the DEVICE-STATE push topic
-The captured connection is the **app↔cloud account channel** (`/sys/<PK>/<DN>/app/down/
-account/...`) where PK/DN identify the *app session*, not the q287s6. Robot battery/clean/
-error push does NOT arrive here. It is almost certainly on a separate ngiot/thing topic
-subscribed only from the **H5/WebView device-control screen** (the part memory notes uses its
-own connection and is hardest to drive under the rig). That topic + its payload shape (the
-key "is it the same `body.data` field-dict as endpoint/control" question) remain
-**uncaptured**. Driving the WebView control screen on a connection that stays up — realistically
-a **physical rooted device** — is what's left to finish Phase 1.
+### KEY FINDING: there is no native per-device MQTT state push to wire into
+The captured Paho connection is ONLY the **app↔cloud Aliyun account channel**
+(`/sys/<PK>/<DN>/app/down/account/bind_reply`, PK/DN = app session, not the robot). It never
+subscribes to any `thing/event/property/*` or device-state topic. Investigated where the live
+robot state in the app actually comes from, layer by layer (all on the live device, frida):
+
+- Opened the **H5 device-control screen** (`com.ecovacs.h5_bridge_v2.ui.H5RobotActivity`) where
+  live battery/clean state is shown. With the Paho hooks live: **zero new MQTT** (no new
+  SUBSCRIBE, no PUBLISH, no new broker TCP connection — `/proc/<pid>/net/tcp` showed only
+  Google IPs, never the 43.110.x broker).
+- Hooked **OkHttp** `newWebSocket` and `RealCall.execute`: the H5 screen produced **no OkHttp
+  WebSocket and no OkHttp REST** either.
+
+Conclusion: the H5 control UI gets its live state through the **WebView's own Chromium network
+stack** (JS `fetch`/`XMLHttpRequest`/`WebSocket`), invisible to Java/Paho/OkHttp hooks — most
+likely polling the same REST `endpoint/control` reads (apn 10001) we already implement, just
+from JS. The native Paho MQTT exists solely for Aliyun account binding. **So the spec's premise
+— a per-device jmq MQTT push carrying device state that we can subscribe to from
+deebot-client — does not match how this app/device delivers state.** No `thing/...` push
+channel was found despite exhaustive, research-guided capture.
+
+### Implication for Phase 2
+Real-time push as specced (subscribe to a jmq topic, fan `body.data` into events) has **no
+captured wire contract to build against**, because the device-state-bearing channel isn't
+native MQTT. Options: (a) confirm via a physical device whether the WebView uses a JS WebSocket
+worth replicating (capture inside Chromium, e.g. CDP/inspector, not frida-Java); (b) treat
+"push" as out of reach for this device and rely on the adaptive-polling path (sibling spec);
+(c) if a JS WebSocket endpoint is found, implement against THAT, not Paho/jmq. Not guessing a
+transport without the contract.
 
 ### Capture tooling (committed)
 - `tools/frida_paho_capture.js` — Java-layer Paho hook (the correct approach; installs cleanly).
