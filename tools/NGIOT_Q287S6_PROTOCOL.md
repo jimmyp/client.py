@@ -180,13 +180,41 @@ UI came from a brief/earlier connection or REST, not a sustained MQTT link. This
 long-standing rig fragility (see memory q287s6-capture-lessons): the app's MQTT presence
 connection is unreliable under frida/emulator.
 
-### What's needed to finish Phase 1
-A rig where the app **keeps** the jmq connection open: most likely a **physical rooted
-device** (where the app + LinkKit MQTT run normally) with `tools/frida_paho_capture.js`
-attached. On a working connection the Java hooks will yield CONNECT (client-id/username,
-redacted password), the SUBSCRIBE topic filter(s), and the inbound PUBLISH topic+payload —
-the last answers the key question: **is the push payload the same `body.data` field-dict
-shape as endpoint/control** (if so, `handle_state_fields()` parses it directly).
+### CAPTURED LIVE (2026-06-30) via Java Paho hook + forced reconnect
+Working method: **attach** `tools/frida_paho_capture.js` to the running app (attach, NOT
+spawn — spawn-mode Java.use faults with ART-not-ready / access violation), then **force a
+reconnect** (toggle guest wifi off/on) so CONNECT/SUBSCRIBE flow through the live hooks.
+
+**CONNECT** (ids redacted; PK=Aliyun productKey, DN=app-session deviceName):
+```
+clientId: <DN>&<PK>|securemode=2,_v=0.7.7,lan=Android,os=14,signmethod=hmacsha1,ext=1|
+username: <DN>&<PK>
+password: <HMAC-SHA1 signature, 40 hex chars>   # NOT the ngiot SST
+mqttVersion: 4 (MQTT 3.1.1)   cleanSession: true   keepAlive: 65s
+```
+This is the **Aliyun LinkKit app-identity bind** — standard Aliyun IoT signed auth
+(securemode=2 / hmacsha1), distinct from the ngiot SST used by REST endpoint/control.
+
+**SUBSCRIBE** (only topic on this app-identity connection):
+```
+/sys/<PK>/<DN>/app/down/account/bind_reply   qos 0
+```
+**PUBLISH** on connect (account bind, carries an iotToken):
+```
+tx -> {"request":{"clientId":"<DN>&<PK>"},"system":{"time":"<ms>","version":"1.0"},
+       "id":"6","params":{"iotToken":"<32hex>"}}
+rx <- {"code":200,"id":"6","message":"success"}
+```
+
+### Still missing: the DEVICE-STATE push topic
+The captured connection is the **app↔cloud account channel** (`/sys/<PK>/<DN>/app/down/
+account/...`) where PK/DN identify the *app session*, not the q287s6. Robot battery/clean/
+error push does NOT arrive here. It is almost certainly on a separate ngiot/thing topic
+subscribed only from the **H5/WebView device-control screen** (the part memory notes uses its
+own connection and is hardest to drive under the rig). That topic + its payload shape (the
+key "is it the same `body.data` field-dict as endpoint/control" question) remain
+**uncaptured**. Driving the WebView control screen on a connection that stays up — realistically
+a **physical rooted device** — is what's left to finish Phase 1.
 
 ### Capture tooling (committed)
 - `tools/frida_paho_capture.js` — Java-layer Paho hook (the correct approach; installs cleanly).

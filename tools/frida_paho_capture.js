@@ -24,10 +24,11 @@ const TAG = 'PAHOCAP';
 function bytesToStr(jbytes) {
   if (jbytes === null) return null;
   try {
-    const String = Java.use('java.lang.String');
-    return String.$new(jbytes, 'UTF-8');
+    const JString = Java.use('java.lang.String');
+    // .toString() coerces the Java String wrapper to a JS string for JSON.
+    return JString.$new(jbytes, 'UTF-8').toString();
   } catch (e) {
-    return '<' + jbytes.length + ' bytes>';
+    try { return '<' + jbytes.length + ' bytes>'; } catch (e2) { return '<bytes>'; }
   }
 }
 
@@ -56,22 +57,16 @@ function describe(msg) {
     rec.type = simple;
 
     if (simple === 'MqttPublish' || simple === 'MqttReceivedMessage') {
-      // getTopicName() + getMessage().getPayload()
+      // MqttPublish exposes getTopicName() + getPayload() directly (verified
+      // via getDeclaredMethods). The payload is the raw MQTT body bytes.
       try { rec.topic = msg.getTopicName(); } catch (e) {}
       try {
-        const m = msg.getMessage();
-        const payload = m.getPayload();
+        const payload = msg.getPayload();
         rec.payload = bytesToStr(payload);
-        rec.qos = m.getQos();
       } catch (e) { rec.payload_err = '' + e; }
     } else if (simple === 'MqttSubscribe') {
-      try {
-        const topics = msg.getTopics ? msg.getTopics() : msg.getNames();
-        rec.topics = topics ? topics.map((t) => '' + t) : null;
-      } catch (e) {
-        // fall back to toString which lists topics
-        rec.repr = '' + msg.toString();
-      }
+      // No public getNames() in this version; toString() lists the topics.
+      rec.repr = '' + msg.toString();
     } else if (simple === 'MqttConnect') {
       // toString() includes clientId, keepalive, cleanSession; password is char[]
       rec.repr = '' + msg.toString();
@@ -162,19 +157,51 @@ function installHooks() {
   });
 }
 
-// On a fresh spawn the Paho classes load lazily (only once the SDK starts its
-// MQTT connection), so Java.use() faults if called too early. Poll until
-// ClientState is loaded, then install the hooks exactly once.
+// Spawn-mode timing: the Paho classes load lazily (only when the SDK opens its
+// MQTT connection), and Java.perform on a fixed timer can run before ART is
+// ready (-> "access violation"). The robust idiom is to hook ClassLoader once
+// ART is up, and install the Paho hooks the moment the target class is loaded
+// -- which is also exactly when the first CONNECT is about to be built, so we
+// never miss it. Falls back to an immediate install if the classes are already
+// present (attach mode).
+const TARGET = 'org.eclipse.paho.client.mqttv3.internal.ClientState';
 let installed = false;
-function waitAndInstall() {
+
+function tryInstall() {
+  if (installed) return;
+  if (classExists(TARGET)) {
+    installed = true;
+    installHooks();
+  }
+}
+
+function start() {
   Java.perform(function () {
+    // attach mode: classes may already be loaded
+    tryInstall();
     if (installed) return;
-    if (classExists('org.eclipse.paho.client.mqttv3.internal.ClientState')) {
-      installed = true;
-      installHooks();
-    } else {
-      setTimeout(waitAndInstall, 1000);
-    }
+
+    // spawn mode: install the moment the SDK loads the Paho class
+    const ClassLoader = Java.use('java.lang.ClassLoader');
+    ClassLoader.loadClass.overload('java.lang.String').implementation = function (name) {
+      const cls = this.loadClass(name);
+      if (!installed && name === TARGET) {
+        try {
+          tryInstall();
+        } catch (e) {
+          console.log(TAG + ' install-on-load error: ' + e);
+        }
+      }
+      return cls;
+    };
+    console.log(TAG + ' armed: waiting for ' + TARGET + ' to load');
   });
 }
-setTimeout(waitAndInstall, 1500);
+
+// Wait for the Java VM to exist before touching it (Java.available guards ART).
+const arm = setInterval(function () {
+  if (Java.available) {
+    clearInterval(arm);
+    start();
+  }
+}, 200);
