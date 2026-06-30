@@ -1,5 +1,13 @@
 # Spec: ngiot real-time MQTT push for q287s6
 
+> **SUPERSEDED (2026-06-30).** An instrumented trace of the official app (PR #5)
+> found the q287s6 has **no native push channel**: its only MQTT connection is
+> Aliyun account-binding, and the app's control UI reads live state through the
+> same REST `GetState` (apn 10001) this library already calls. There is no `jmq`
+> push to capture. Real-time state for this device is polling — see
+> `SPEC_ADAPTIVE_POLLING.md` (PR #4). This spec is kept only for history and in
+> case a *different* ngiot device turns out to expose push.
+
 **Owner:** one agent, needs a real q287s6 + the app/MITM capture rig.
 **Goal:** device-initiated state changes (clean finished, error raised, battery
 drained, docked) reach Home Assistant in real time, instead of only on the next
