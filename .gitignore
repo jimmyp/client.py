@@ -33,3 +33,4 @@ test.py
 similarity_output/
 
 *.log
+ngiot_app_capture.jsonl

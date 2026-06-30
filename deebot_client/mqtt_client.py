@@ -6,6 +6,7 @@ import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from importlib import resources
 import ssl
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -32,6 +33,29 @@ RECONNECT_INTERVAL = 5  # seconds
 
 _LOGGER = get_logger(__name__)
 _CLIENT_LOGGER = get_logger(f"{__name__}.client")
+
+
+def _ecovacs_ssl_context() -> ssl.SSLContext:
+    """SSL context for the Ecovacs MQTT broker on port 443.
+
+    The broker presents a certificate signed by a private 'ECOVACS CA' (not a
+    public CA), so the public trust store can't validate it. We bundle that CA
+    and verify the chain against it -- this keeps server authentication on
+    (rejecting any cert NOT signed by Ecovacs) rather than disabling
+    verification entirely. Hostname checking stays off because the broker
+    cert's SANs don't cover every regional broker hostname (e.g. the ngiot
+    ``*.dc.ww.ecouser.net`` hosts).
+    """
+    ca = resources.files("deebot_client.certs").joinpath("ecovacs_ca.pem")
+    ctx = ssl.create_default_context(cadata=ca.read_text("ascii"))
+    ctx.check_hostname = False
+    # The ECOVACS CA cert is not RFC 5280 compliant (it omits the Authority Key
+    # Identifier extension), so Python's default VERIFY_X509_STRICT rejects it
+    # with "Missing Authority Key Identifier". Drop just that strict flag --
+    # CERT_REQUIRED chain verification stays on (a cert not signed by this CA is
+    # still rejected), we only stop enforcing the RFC extension the CA omits.
+    ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return ctx
 
 
 def _get_topics(device_info: DeviceInfo) -> list[str]:
@@ -91,9 +115,7 @@ def create_mqtt_config(
         hostname = f"mq{continent_postfix}.ecouser.net"
         port = 443
         if ssl_context is UNDEFINED:
-            ssl_ctx = ssl.create_default_context()
-            ssl_ctx.check_hostname = False
-            ssl_ctx.verify_mode = ssl.CERT_NONE
+            ssl_ctx = _ecovacs_ssl_context()
 
     return MqttConfiguration(
         hostname=hostname,

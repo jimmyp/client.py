@@ -393,6 +393,42 @@ def test_config(
         assert config.ssl_context is None
 
 
+def test_default_mqtt_443_ssl_context_configured_to_verify_ecovacs_ca() -> None:
+    """The default port-443 SSL context is built to verify the ECOVACS CA.
+
+    This asserts the context is CONFIGURED correctly -- it does not open a
+    socket, so it does not prove a TLS handshake actually succeeds. (The real
+    handshake against mq-*.ecouser.net needs network and lives outside CI; it
+    was what caught the VERIFY_X509_STRICT bug guarded below.)
+
+    Historically this path disabled verification entirely (CERT_NONE), which
+    accepts ANY certificate (MITM-able). Instead it must verify the chain
+    against the bundled ECOVACS CA. Hostname checking stays off because the
+    broker cert's SANs do not cover every regional broker hostname.
+    """
+    config = create_mqtt_config(device_id="test", country="IT")
+    ctx = config.ssl_context
+    assert isinstance(ctx, ssl.SSLContext)
+    # Must actually verify the chain (the security fix) ...
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    # ... but not hostname (SANs don't cover all broker hosts).
+    assert ctx.check_hostname is False
+    # The loaded CA must specifically be the ECOVACS CA, not just "some" cert.
+    cas = ctx.get_ca_certs()
+    assert cas, "expected the ECOVACS CA to be loaded"
+    subjects = {
+        name: value for ca in cas for rdn in ca["subject"] for (name, value) in rdn
+    }
+    assert subjects.get("commonName") == "ECOVACS CA"
+    assert subjects.get("organizationName") == "ecovacs"
+    # The ECOVACS CA omits the Authority Key Identifier, so RFC5280-strict
+    # verification (Python's default since 3.13) would reject the REAL broker
+    # cert -- breaking every connection. This flag MUST be off, or the "fix"
+    # is worse than the CERT_NONE it replaced. (Regression guard: a flag-only
+    # test missed this; only a live handshake against mq-eu.ecouser.net caught it.)
+    assert not (ctx.verify_flags & ssl.VERIFY_X509_STRICT)
+
+
 @pytest.mark.parametrize(
     ("override_mqtt_url", "error_msg"),
     [

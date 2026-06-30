@@ -9,6 +9,7 @@ import pytest
 
 from deebot_client.authentication import Authenticator, create_rest_config
 from deebot_client.models import Credentials
+from deebot_client.ngiot_client import NgiotClient
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -112,3 +113,12 @@ def test_config_override_rest_url(
     assert config.portal_url == expected_portal_url
     assert config.login_url == expected_login_url
     assert config.auth_code_url == expected_auth_code_url
+
+
+def test_ngiot_client_is_lazily_cached(rest_config: RestConfiguration) -> None:
+    """The ngiot transport is created once and shares the auth session."""
+    authenticator = Authenticator(rest_config, "test", "test")
+    client = authenticator.ngiot
+    assert isinstance(client, NgiotClient)
+    # Same instance on repeated access -> the per-device SST cache is shared.
+    assert authenticator.ngiot is client
