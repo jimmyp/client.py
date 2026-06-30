@@ -219,22 +219,39 @@ robot state in the app actually comes from, layer by layer (all on the live devi
 - Hooked **OkHttp** `newWebSocket` and `RealCall.execute`: the H5 screen produced **no OkHttp
   WebSocket and no OkHttp REST** either.
 
-Conclusion: the H5 control UI gets its live state through the **WebView's own Chromium network
-stack** (JS `fetch`/`XMLHttpRequest`/`WebSocket`), invisible to Java/Paho/OkHttp hooks — most
-likely polling the same REST `endpoint/control` reads (apn 10001) we already implement, just
-from JS. The native Paho MQTT exists solely for Aliyun account binding. **So the spec's premise
-— a per-device jmq MQTT push carrying device state that we can subscribe to from
-deebot-client — does not match how this app/device delivers state.** No `thing/...` push
-channel was found despite exhaustive, research-guided capture.
+Then went INSIDE the WebView via Chrome DevTools Protocol (forced
+setWebContentsDebuggingEnabled(true) with tools/wv_debug.js, `adb forward` to
+`webview_devtools_remote_<pid>`, drove CDP Network domain — tools/cdp_h5_capture.py):
 
-### Implication for Phase 2
-Real-time push as specced (subscribe to a jmq topic, fan `body.data` into events) has **no
-captured wire contract to build against**, because the device-state-bearing channel isn't
-native MQTT. Options: (a) confirm via a physical device whether the WebView uses a JS WebSocket
-worth replicating (capture inside Chromium, e.g. CDP/inspector, not frida-Java); (b) treat
-"push" as out of reach for this device and rely on the adaptive-polling path (sibling spec);
-(c) if a JS WebSocket endpoint is found, implement against THAT, not Paho/jmq. Not guessing a
-transport without the contract.
+- With CDP attached across an H5 open + UI interaction, the WebView made **NO network requests
+  except loading local bundle assets** (`file:///.../y30h5/dist/img/*.png`). **No fetch/XHR to
+  any server, no WebSocket created, no polling.**
+- Hooked `WebView.addJavascriptInterface`: the H5 registers **`androidBridge` ->
+  `com.eco.webview.jsbridge.BridgeWebView2`**. The activity is literally `h5_bridge_v2`.
+
+DEFINITIVE CONCLUSION (every layer traced): the H5 control UI gets robot data through the
+**native JS bridge** (`androidBridge`), NOT over its own network. JS calls the bridge -> native
+code makes the REST `endpoint/control` call (the same apn-10001 `GetState` read this library
+implements) -> result returned to JS. There is **no WebSocket and no MQTT** carrying device
+state. The native Paho MQTT exists solely for Aliyun account binding.
+
+**So there is no real-time push for the q287s6.** Device state reaches the app exclusively via
+on-demand REST `endpoint/control` reads through the native bridge. The spec's premise — a
+per-device jmq MQTT push we subscribe to from deebot-client — **does not exist on this device.**
+
+### Implication for Phase 2 (and the spec)
+There is **nothing to wire**: no push transport exists to subscribe to. Real-time state for
+q287s6 must come from **polling `endpoint/control` (GetState)** — which is exactly the sibling
+**adaptive-polling** spec. The `handle_state_fields()` helper landed here (commit dd43d46) is
+the right shared primitive for that path. Recommend: close this MQTT-push spec as
+"not applicable to q287s6 — no native push channel; use adaptive polling," keep the capture
+tooling + this analysis as the evidence, and do NOT build an MQTT transport that would deliver
+no data.
+
+Capture method (reproducible): force WebView debugging (tools/wv_debug.js) -> spawn/attach ->
+`adb forward tcp:9222 localabstract:webview_devtools_remote_<pid>` ->
+`python tools/cdp_h5_capture.py` (uses suppress_origin to beat CDP's 403). Java MQTT:
+attach tools/frida_paho_capture.js + force reconnect (wifi toggle).
 
 ### Capture tooling (committed)
 - `tools/frida_paho_capture.js` — Java-layer Paho hook (the correct approach; installs cleanly).
