@@ -14,14 +14,18 @@ from deebot_client.commands.json.battery import GetBattery
 from deebot_client.commands.json.map import GetMapSetV2
 from deebot_client.commands.xml import GetBatteryInfo
 from deebot_client.const import DataType
-from deebot_client.device import Device
+from deebot_client.device import (
+    _STATE_REFRESH_INTERVAL_ACTIVE,
+    _STATE_REFRESH_INTERVAL_IDLE,
+    Device,
+)
 from deebot_client.events import AvailabilityEvent, StateEvent
 from deebot_client.events.map import MapSetType, Position, PositionsEvent
 from deebot_client.events.network import NetworkInfoEvent
 from deebot_client.hardware import get_static_device_info
 from deebot_client.messages.json import OnBattery
 from deebot_client.messages.xml import BatteryInfo
-from deebot_client.models import DeviceInfo, StaticDeviceInfo
+from deebot_client.models import DeviceInfo, State, StaticDeviceInfo
 from deebot_client.mqtt_client import MqttClient, SubscriberInfo
 from deebot_client.rs.map import PositionType
 from tests.helpers import mock_static_device_info
@@ -426,4 +430,194 @@ async def test_message_requested_commands(
         execute_command_mock.assert_called_once_with(GetMapSetV2("199390082", set_type))
 
     # teardown bot
+    await bot.teardown()
+
+
+def _state_refresh_device(
+    authenticator: Authenticator,
+    api_device_info: ApiDeviceInfo,
+    state_mock: Command,
+    *,
+    state_refresh: bool,
+) -> Device:
+    """Build a device whose StateEvent refresh command is ``state_mock``."""
+    device_info = DeviceInfo(
+        api_device_info,
+        mock_static_device_info({StateEvent: [state_mock]}),
+    )
+    return Device(device_info, authenticator, state_refresh=state_refresh)
+
+
+@pytest.mark.parametrize(
+    ("state", "expected_interval"),
+    [
+        (State.CLEANING, _STATE_REFRESH_INTERVAL_ACTIVE),
+        (State.RETURNING, _STATE_REFRESH_INTERVAL_ACTIVE),
+        (State.PAUSED, _STATE_REFRESH_INTERVAL_ACTIVE),
+        (State.IDLE, _STATE_REFRESH_INTERVAL_IDLE),
+        (State.DOCKED, _STATE_REFRESH_INTERVAL_IDLE),
+        (State.ERROR, _STATE_REFRESH_INTERVAL_IDLE),
+        (None, _STATE_REFRESH_INTERVAL_IDLE),
+    ],
+    ids=[
+        "cleaning",
+        "returning",
+        "paused",
+        "idle",
+        "docked",
+        "error",
+        "unknown",
+    ],
+)
+async def test_state_refresh_interval_selection(
+    authenticator: Authenticator,
+    api_device_info: ApiDeviceInfo,
+    state: State | None,
+    expected_interval: float,
+) -> None:
+    """The refresh interval is fast while active and slow otherwise (pure, no timing)."""
+    bot = _state_refresh_device(
+        authenticator, api_device_info, Mock(spec_set=Command), state_refresh=True
+    )
+    if state is not None:
+        bot.events.notify(StateEvent(state))
+        await asyncio.sleep(0)
+
+    assert bot._state_refresh_interval() == expected_interval
+
+    await bot.teardown()
+
+
+@patch("deebot_client.device._STATE_REFRESH_INTERVAL_ACTIVE", 0.1)
+@patch("deebot_client.device._STATE_REFRESH_INTERVAL_IDLE", 0.5)
+async def test_state_refresh_polls_faster_while_active(
+    authenticator: Authenticator,
+    api_device_info: ApiDeviceInfo,
+) -> None:
+    """While CLEANING the state command is polled at the (short) active interval."""
+    state_mock = Mock(spec_set=Command)
+    state_mock.execute = AsyncMock(
+        return_value=DeviceCommandResult(device_reached=True)
+    )
+    bot = _state_refresh_device(
+        authenticator, api_device_info, state_mock, state_refresh=True
+    )
+    mqtt_client = Mock(spec=MqttClient)
+    mqtt_client.subscribe.return_value = Mock(spec=Callable[[], None])
+    await bot.initialize(mqtt_client)
+
+    # the state-refresh task should have been started by initialize
+    assert bot._state_refresh_task is not None
+    assert not bot._state_refresh_task.done()
+
+    bot.events.notify(StateEvent(State.CLEANING))
+    await asyncio.sleep(0)
+    state_mock.execute.reset_mock()
+
+    # within ~3 active intervals we expect multiple polls
+    await asyncio.sleep(0.35)
+    active_polls = state_mock.execute.await_count
+    assert active_polls >= 2, f"expected >=2 active polls, got {active_polls}"
+
+    # dock the bot -> next poll should fall back to the slow interval
+    bot.events.notify(StateEvent(State.DOCKED))
+    await asyncio.sleep(0)
+    state_mock.execute.reset_mock()
+
+    # over the same window, far fewer (slow-interval) polls
+    await asyncio.sleep(0.35)
+    idle_polls = state_mock.execute.await_count
+    assert idle_polls < active_polls, (
+        f"expected fewer idle polls than active ({idle_polls} !< {active_polls})"
+    )
+
+    await bot.teardown()
+
+
+@patch("deebot_client.device._STATE_REFRESH_INTERVAL_ACTIVE", 0.1)
+@patch("deebot_client.device._STATE_REFRESH_INTERVAL_IDLE", 0.5)
+async def test_state_refresh_uses_generic_refresh_command(
+    authenticator: Authenticator,
+    api_device_info: ApiDeviceInfo,
+) -> None:
+    """The loop executes whatever get_refresh_commands(StateEvent) returns."""
+    state_mock = Mock(spec_set=Command)
+    state_mock.execute = AsyncMock(
+        return_value=DeviceCommandResult(device_reached=True)
+    )
+    bot = _state_refresh_device(
+        authenticator, api_device_info, state_mock, state_refresh=True
+    )
+    mqtt_client = Mock(spec=MqttClient)
+    mqtt_client.subscribe.return_value = Mock(spec=Callable[[], None])
+    await bot.initialize(mqtt_client)
+
+    bot.events.notify(StateEvent(State.CLEANING))
+    await asyncio.sleep(0.25)
+
+    # the exact mock from get_refresh_commands(StateEvent) was executed
+    state_mock.execute.assert_awaited()
+    await bot.teardown()
+
+
+@patch("deebot_client.device._STATE_REFRESH_INTERVAL_ACTIVE", 0.1)
+async def test_state_refresh_disabled_by_default(
+    authenticator: Authenticator,
+    api_device_info: ApiDeviceInfo,
+) -> None:
+    """Without the opt-in, no state-refresh loop runs (legacy behaviour unchanged)."""
+    state_mock = Mock(spec_set=Command)
+    state_mock.execute = AsyncMock(
+        return_value=DeviceCommandResult(device_reached=True)
+    )
+    bot = _state_refresh_device(
+        authenticator, api_device_info, state_mock, state_refresh=False
+    )
+    mqtt_client = Mock(spec=MqttClient)
+    mqtt_client.subscribe.return_value = Mock(spec=Callable[[], None])
+    await bot.initialize(mqtt_client)
+
+    # The opt-in is off, so no state-refresh loop is started.
+    assert bot._state_refresh_task is None
+
+    # Any execute calls so far come from the event bus' own one-shot refresh,
+    # not from a polling loop. Let the active interval elapse several times and
+    # confirm there is no repeated (loop-driven) polling.
+    bot.events.notify(StateEvent(State.CLEANING))
+    await asyncio.sleep(0)
+    state_mock.execute.reset_mock()
+
+    await asyncio.sleep(0.35)
+    state_mock.execute.assert_not_called()
+    await bot.teardown()
+
+
+@patch("deebot_client.device._STATE_REFRESH_INTERVAL_ACTIVE", 0.1)
+@patch("deebot_client.device._STATE_REFRESH_INTERVAL_IDLE", 0.5)
+async def test_state_refresh_backs_off_when_unavailable(
+    authenticator: Authenticator,
+    api_device_info: ApiDeviceInfo,
+) -> None:
+    """When the device is unreachable, the loop backs off to the slow interval."""
+    state_mock = Mock(spec_set=Command)
+    state_mock.execute = AsyncMock(
+        return_value=DeviceCommandResult(device_reached=False)
+    )
+    bot = _state_refresh_device(
+        authenticator, api_device_info, state_mock, state_refresh=True
+    )
+    mqtt_client = Mock(spec=MqttClient)
+    mqtt_client.subscribe.return_value = Mock(spec=Callable[[], None])
+    await bot.initialize(mqtt_client)
+
+    # even though state is "active", an unreachable device must back off
+    bot.events.notify(StateEvent(State.CLEANING))
+    await asyncio.sleep(0)
+    state_mock.execute.reset_mock()
+
+    await asyncio.sleep(0.35)
+    polls = state_mock.execute.await_count
+    # backed off to the slow interval: not hammering at the active rate
+    assert polls <= 1, f"expected back-off (<=1 poll), got {polls}"
+
     await bot.teardown()
