@@ -59,9 +59,23 @@ function emit(dir, ptr, len) {
   console.log(TAG + ' ' + JSON.stringify({ dir: dir, type: type, len: len }));
 }
 
+function resolveExport(libname, sym) {
+  // frida 17: Module.findExportByName(lib, sym) can return null even when the
+  // export exists; the module-object enumerateExports() finds it. Try both.
+  let p = null;
+  try { p = Module.findExportByName(libname, sym); } catch (e) {}
+  if (p) return p;
+  try {
+    const m = Process.getModuleByName(libname);
+    const found = m.enumerateExports().find((e) => e.name === sym);
+    if (found) return found.address;
+  } catch (e) {}
+  return null;
+}
+
 function hookSsl(libname) {
-  const ssl_read = Module.findExportByName(libname, 'SSL_read');
-  const ssl_write = Module.findExportByName(libname, 'SSL_write');
+  const ssl_read = resolveExport(libname, 'SSL_read');
+  const ssl_write = resolveExport(libname, 'SSL_write');
   if (!ssl_read || !ssl_write) return false;
 
   // int SSL_read(SSL *ssl, void *buf, int num) -> bytes read into buf on return

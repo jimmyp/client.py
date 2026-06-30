@@ -145,3 +145,50 @@ against the read oracle.
 
 `resetConsumable` types (from the consumables read surface): `sideBrush`, `rollBrush`,
 `filter`, `unitCare`.
+
+## MQTT push (jmq broker) — architecture understood, live wire NOT yet captured (2026-06-30)
+
+Goal: device-initiated state changes pushed in real time (vs. polling apn 10001).
+Spec: tools/SPEC_NGIOT_MQTT_PUSH.md.
+
+### Established this session (verified)
+- **Broker host**: `service.jmq` = `jmq-ngiot-na.dc.ww.ecouser.net`, which resolves to
+  `slb-mq-iot-na.ww.ecouser.net` (43.110.16.x), port **443**. Reachable from the guest
+  (TCP connect + ICMP OK after fixing emulator clock skew).
+- **MQTT stack**: the app uses **stock Eclipse Paho Java** — unshaded
+  `org.eclipse.paho.client.mqttv3.*` classes are loaded (ClientState, ClientComms,
+  CommsReceiver, internal.wire.MqttConnect/MqttSubscribe/MqttPublish, MqttConnectOptions),
+  wrapped by `com.aliyun.alink.linksdk.*` (Aliyun LinkKit). So the MQTT bytes ride a Java
+  `SSLSocket`, NOT the system `libssl.so` used by OkHttp.
+- **Why native SSL hooks fail**: hooking `libssl.so` `SSL_read`/`SSL_write` (BoringSSL)
+  captures nothing — the Paho `SSLSocket` path doesn't go through those exports. Confirmed
+  across 5 native attempts (hook installs, 0 MQTT bytes). The correct interception layer is
+  **Java Paho**, above TLS (see tools/frida_paho_capture.js).
+- **Correct hook points** (verified to install cleanly via attach-mode):
+  `ClientState.send(MqttWireMessage, MqttToken)` for outbound (CONNECT/SUBSCRIBE/PUBLISH),
+  `MqttConnect.<init>(...)` for CONNECT credentials (clientId/username/password — password
+  is a char[] here, redact to length), and `ClientState.notifyReceivedMsg(MqttWireMessage)`
+  for inbound pushes.
+
+### The remaining blocker (rig, not understanding)
+The app **does not hold the jmq MQTT connection alive under the instrumented emulator**.
+With Paho hooks installed and live, 50s produced no PINGREQ heartbeat, and a real
+device-side change (volume 8->5 via the SST transport) produced **no inbound push** to the
+app. Inspecting `/proc/<pid>/net/tcp*` showed the app had **no TCP connection to the broker
+(43.110.16.x)** at all — only DNS-over-TLS to 10.0.2.3:853. The "Online" status seen in the
+UI came from a brief/earlier connection or REST, not a sustained MQTT link. This matches the
+long-standing rig fragility (see memory q287s6-capture-lessons): the app's MQTT presence
+connection is unreliable under frida/emulator.
+
+### What's needed to finish Phase 1
+A rig where the app **keeps** the jmq connection open: most likely a **physical rooted
+device** (where the app + LinkKit MQTT run normally) with `tools/frida_paho_capture.js`
+attached. On a working connection the Java hooks will yield CONNECT (client-id/username,
+redacted password), the SUBSCRIBE topic filter(s), and the inbound PUBLISH topic+payload —
+the last answers the key question: **is the push payload the same `body.data` field-dict
+shape as endpoint/control** (if so, `handle_state_fields()` parses it directly).
+
+### Capture tooling (committed)
+- `tools/frida_paho_capture.js` — Java-layer Paho hook (the correct approach; installs cleanly).
+- `tools/frida_mqtt_capture.js` + `tools/decode_mqtt_capture.py` — native SSL-bytes approach
+  (kept for reference / other apps; does not capture this app's Paho-over-SSLSocket MQTT).
