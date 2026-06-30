@@ -40,6 +40,16 @@ if TYPE_CHECKING:
 _LOGGER = get_logger(__name__)
 _AVAILABLE_CHECK_INTERVAL = 60
 
+# Adaptive state-refresh cadence (opt-in, see ``Device(state_refresh=...)``).
+# A single state read returns all telemetry, so polling it keeps every entity
+# current. Poll fast while the bot is doing something, slow when it's idle.
+_STATE_REFRESH_INTERVAL_ACTIVE = 10
+_STATE_REFRESH_INTERVAL_IDLE = 60
+# States that warrant the fast cadence (the bot is moving / mid-job).
+_STATE_REFRESH_ACTIVE_STATES = frozenset(
+    {State.CLEANING, State.RETURNING, State.PAUSED}
+)
+
 DeviceCommandExecute = Callable[[Command], Coroutine[Any, Any, dict[str, Any]]]
 
 
@@ -50,16 +60,23 @@ class Device:
         self,
         device_info: DeviceInfo,
         authenticator: Authenticator,
+        *,
+        state_refresh: bool = False,
     ) -> None:
         self._device_info = device_info
         self.device_info: Final = device_info.api
         self.capabilities: Final = device_info.static.capabilities
         self._authenticator = authenticator
+        # Opt-in: adaptive state polling. Off by default so existing devices
+        # keep their current (availability-only) cadence and don't get a faster
+        # poll without the caller asking for it.
+        self._state_refresh_enabled: Final = state_refresh
 
         self._semaphore = asyncio.Semaphore(3)
         self._state: StateEvent | None = None
         self._last_time_available: datetime = datetime.now(tz=UTC)
         self._available_task: asyncio.Task[Any] | None = None
+        self._state_refresh_task: asyncio.Task[Any] | None = None
         self._running_tasks: set[asyncio.Future[Any]] = set()
         self._unsubscribe: Callable[[], None] | None = None
 
@@ -143,6 +160,13 @@ class Device:
             self._running_tasks.add(self._available_task)
             self._available_task.add_done_callback(self._running_tasks.discard)
 
+        if self._state_refresh_enabled and (
+            self._state_refresh_task is None or self._state_refresh_task.done()
+        ):
+            self._state_refresh_task = asyncio.create_task(self._state_refresh_worker())
+            self._running_tasks.add(self._state_refresh_task)
+            self._state_refresh_task.add_done_callback(self._running_tasks.discard)
+
     async def teardown(self) -> None:
         """Tear down bot including stopping task and unsubscribing."""
         if self._unsubscribe:
@@ -180,6 +204,49 @@ class Device:
                     )
                     await cancel(tasks)
             await asyncio.sleep(_AVAILABLE_CHECK_INTERVAL)
+
+    def _state_refresh_interval(self) -> float:
+        """Return the state-refresh interval for the current (last known) state.
+
+        Fast while the bot is active (cleaning / returning / paused), slow when
+        idle, docked, errored or unknown. The state is read from the event bus,
+        never tracked separately, so this stays in sync with what consumers see.
+        """
+        last = self.events.get_last_event(StateEvent)
+        if last is not None and last.state in _STATE_REFRESH_ACTIVE_STATES:
+            return _STATE_REFRESH_INTERVAL_ACTIVE
+        return _STATE_REFRESH_INTERVAL_IDLE
+
+    async def _state_refresh_worker(self) -> None:
+        """Poll the state-refresh command, fast while active and slow when idle.
+
+        Picks the command generically via
+        ``capabilities.get_refresh_commands(StateEvent)`` so it stays
+        device-agnostic, and emits nothing itself -- the refresh command
+        produces the events. On failure or an unreachable device it backs off to
+        the slow interval rather than hammering.
+        """
+        commands = self.capabilities.get_refresh_commands(StateEvent)
+        if not commands:
+            return
+
+        while True:
+            interval = self._state_refresh_interval()
+            try:
+                results = await asyncio.gather(
+                    *(self._execute_command(command) for command in commands)
+                )
+            except Exception:
+                _LOGGER.debug(
+                    "An exception occurred during the state refresh", exc_info=True
+                )
+                interval = _STATE_REFRESH_INTERVAL_IDLE
+            else:
+                if not all(result.device_reached for result in results):
+                    # Device unreachable -- back off to the slow interval.
+                    interval = _STATE_REFRESH_INTERVAL_IDLE
+
+            await asyncio.sleep(interval)
 
     async def _execute_command(
         self,
