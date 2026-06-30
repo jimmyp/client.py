@@ -125,6 +125,76 @@ def _determine_state(data: dict[str, Any], error_code: int | None) -> State | No
     return _STATUS_TO_STATE.get(status) if isinstance(status, str) else None
 
 
+def handle_state_fields(event_bus: EventBus, data: dict[str, Any]) -> HandlingResult:
+    """Fan a ngiot ``body.data`` field dict out to events.
+
+    Shared by the polled :class:`GetState` (apn 10001 read) and the pushed MQTT
+    state messages, which carry the same flat field dict. Notifies only the
+    events whose fields are present, so a partial push updates just those.
+    """
+    if "battery" in data:
+        event_bus.notify(BatteryEvent(int(data["battery"])))
+
+    error_code = _error_code(data)
+    if (state := _determine_state(data, error_code)) is not None:
+        event_bus.notify(StateEvent(state))
+
+    if (fan_mode := data.get("fanMode")) is not None:
+        if fan_mode in NGIOT_FAN_MODE_TO_LEVEL:
+            event_bus.notify(FanSpeedEvent(NGIOT_FAN_MODE_TO_LEVEL[fan_mode]))
+        else:
+            _LOGGER.warning("Unmapped ngiot fanMode %r; please report it", fan_mode)
+
+    if (water_mode := data.get("waterMode")) is not None:
+        if water_mode in NGIOT_WATER_MODE_TO_AMOUNT:
+            event_bus.notify(WaterAmountEvent(NGIOT_WATER_MODE_TO_AMOUNT[water_mode]))
+        else:
+            _LOGGER.warning("Unmapped ngiot waterMode %r; please report it", water_mode)
+
+    if (mop_state := data.get("mopState")) is not None:
+        event_bus.notify(MopAttachedEvent(mop_state == "installed"))
+
+    if error_code is not None:
+        event_bus.notify(ErrorEvent(error_code, ERROR_CODES.get(error_code)))
+
+    if isinstance(data.get("consumables"), list):
+        _notify_consumables(event_bus, data["consumables"])
+
+    station_status = data.get("stationStatus")
+    if isinstance(station_status, int) and not isinstance(station_status, bool):
+        event_bus.notify(StationEvent(StationState(station_status)))
+
+    _notify_settings(event_bus, data)
+
+    return HandlingResult.success()
+
+
+def _notify_settings(event_bus: EventBus, data: dict[str, Any]) -> None:
+    if (volume := data.get("volume")) is not None:
+        event_bus.notify(VolumeEvent(int(volume), maximum=None))
+
+    if (child_lock := data.get("childLock")) is not None:
+        event_bus.notify(ChildLockEvent(bool(child_lock)))
+
+
+def _notify_consumables(event_bus: EventBus, consumables: list[dict[str, Any]]) -> None:
+    for component in consumables:
+        comp_type = component.get("type")
+        life_span = (
+            NGIOT_CONSUMABLE_TO_LIFESPAN.get(comp_type)
+            if isinstance(comp_type, str)
+            else None
+        )
+        if life_span is None:
+            continue
+        total = int(component["total"])
+        if total <= 0:
+            continue
+        left = int(component["left"])
+        percent = round((left / total) * 100, 2)
+        event_bus.notify(LifeSpanEvent(life_span, percent, left))
+
+
 class GetState(NgiotGetCommand):
     """Get state command."""
 
@@ -139,70 +209,4 @@ class GetState(NgiotGetCommand):
     def _handle_body_data_dict(
         cls, event_bus: EventBus, data: dict[str, Any]
     ) -> HandlingResult:
-        if "battery" in data:
-            event_bus.notify(BatteryEvent(int(data["battery"])))
-
-        error_code = _error_code(data)
-        if (state := _determine_state(data, error_code)) is not None:
-            event_bus.notify(StateEvent(state))
-
-        if (fan_mode := data.get("fanMode")) is not None:
-            if fan_mode in NGIOT_FAN_MODE_TO_LEVEL:
-                event_bus.notify(FanSpeedEvent(NGIOT_FAN_MODE_TO_LEVEL[fan_mode]))
-            else:
-                _LOGGER.warning("Unmapped ngiot fanMode %r; please report it", fan_mode)
-
-        if (water_mode := data.get("waterMode")) is not None:
-            if water_mode in NGIOT_WATER_MODE_TO_AMOUNT:
-                event_bus.notify(
-                    WaterAmountEvent(NGIOT_WATER_MODE_TO_AMOUNT[water_mode])
-                )
-            else:
-                _LOGGER.warning(
-                    "Unmapped ngiot waterMode %r; please report it", water_mode
-                )
-
-        if (mop_state := data.get("mopState")) is not None:
-            event_bus.notify(MopAttachedEvent(mop_state == "installed"))
-
-        if error_code is not None:
-            event_bus.notify(ErrorEvent(error_code, ERROR_CODES.get(error_code)))
-
-        if isinstance(data.get("consumables"), list):
-            cls._notify_consumables(event_bus, data["consumables"])
-
-        station_status = data.get("stationStatus")
-        if isinstance(station_status, int) and not isinstance(station_status, bool):
-            event_bus.notify(StationEvent(StationState(station_status)))
-
-        cls._notify_settings(event_bus, data)
-
-        return HandlingResult.success()
-
-    @staticmethod
-    def _notify_settings(event_bus: EventBus, data: dict[str, Any]) -> None:
-        if (volume := data.get("volume")) is not None:
-            event_bus.notify(VolumeEvent(int(volume), maximum=None))
-
-        if (child_lock := data.get("childLock")) is not None:
-            event_bus.notify(ChildLockEvent(bool(child_lock)))
-
-    @staticmethod
-    def _notify_consumables(
-        event_bus: EventBus, consumables: list[dict[str, Any]]
-    ) -> None:
-        for component in consumables:
-            comp_type = component.get("type")
-            life_span = (
-                NGIOT_CONSUMABLE_TO_LIFESPAN.get(comp_type)
-                if isinstance(comp_type, str)
-                else None
-            )
-            if life_span is None:
-                continue
-            total = int(component["total"])
-            if total <= 0:
-                continue
-            left = int(component["left"])
-            percent = round((left / total) * 100, 2)
-            event_bus.notify(LifeSpanEvent(life_span, percent, left))
+        return handle_state_fields(event_bus, data)

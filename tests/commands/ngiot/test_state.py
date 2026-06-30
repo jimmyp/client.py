@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import Mock, call
 
-from deebot_client.commands.ngiot.state import STATE_FIELDS, GetState
+from deebot_client.commands.ngiot.state import (
+    STATE_FIELDS,
+    GetState,
+    handle_state_fields,
+)
 from deebot_client.const import ERROR_CODES
+from deebot_client.event_bus import EventBus
 from deebot_client.events import (
     BatteryEvent,
     ChildLockEvent,
@@ -22,6 +28,7 @@ from deebot_client.events.water_info import (
     WaterAmount,
     WaterAmountEvent,
 )
+from deebot_client.message import HandlingState
 from deebot_client.models import State
 
 from . import assert_ngiot_command
@@ -152,3 +159,29 @@ async def test_GetState_error_sets_error_state() -> None:
         expected_apn=10001,
         expected_data={"fields": STATE_FIELDS},
     )
+
+
+def test_handle_state_fields_fans_out_events_directly() -> None:
+    # The shared helper turns a body.data field dict into events without going
+    # through a command, so a pushed MQTT message can reuse the same parser.
+    event_bus = Mock(spec_set=EventBus)
+
+    result = handle_state_fields(event_bus, {"battery": 100, "fanMode": "auto"})
+
+    assert result.state == HandlingState.SUCCESS
+    event_bus.notify.assert_has_calls(
+        [call(BatteryEvent(100)), call(FanSpeedEvent(FanSpeedLevel.NORMAL))],
+        any_order=True,
+    )
+
+
+def test_handle_state_fields_matches_GetState_parsing() -> None:
+    # The helper must fan the captured read out to exactly the same events the
+    # command does, so push and poll produce identical results.
+    direct_bus = Mock(spec_set=EventBus)
+    handle_state_fields(direct_bus, _CAPTURED_BODY_DATA)
+
+    command_bus = Mock(spec_set=EventBus)
+    GetState._handle_body_data_dict(command_bus, _CAPTURED_BODY_DATA)
+
+    assert direct_bus.notify.call_args_list == command_bus.notify.call_args_list
