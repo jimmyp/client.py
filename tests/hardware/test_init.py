@@ -42,6 +42,7 @@ from deebot_client.commands.json.true_detect import GetTrueDetect
 from deebot_client.commands.json.voice_assistant_state import GetVoiceAssistantState
 from deebot_client.commands.json.volume import GetVolume
 from deebot_client.commands.json.water_info import GetWaterInfo
+from deebot_client.commands.ngiot.state import GetState
 from deebot_client.events import (
     AdvancedModeEvent,
     AutoEmptyEvent,
@@ -244,8 +245,28 @@ async def test_get_static_device_info(
                 WaterAmountEvent: [GetWaterInfo()],
             },
         ),
+        (
+            "q287s6",
+            {
+                AvailabilityEvent: [GetState(is_available_check=True)],
+                BatteryEvent: [GetState()],
+                ChildLockEvent: [GetState()],
+                CustomCommandEvent: [],
+                ErrorEvent: [GetState()],
+                FanSpeedEvent: [GetState()],
+                LifeSpanEvent: [GetState()],
+                MopAttachedEvent: [GetState()],
+                NetworkInfoEvent: [GetState()],
+                ReportStatsEvent: [],
+                StateEvent: [GetState()],
+                StatsEvent: [],
+                TotalStatsEvent: [],
+                VolumeEvent: [GetState()],
+                WaterAmountEvent: [GetState()],
+            },
+        ),
     ],
-    ids=["5xu9h3", "itk04l", "yna5xi", "p95mgv"],
+    ids=["5xu9h3", "itk04l", "yna5xi", "p95mgv", "q287s6"],
 )
 async def test_capabilities_event_extraction(
     class_: str, expected: dict[type[Event], list[Command]]
