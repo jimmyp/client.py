@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 from deebot_client.const import ERROR_CODES
@@ -53,7 +54,12 @@ def _error_code(data: dict[str, Any]) -> int | None:
     codes = data.get("error")
     if not isinstance(codes, list):
         return None
-    return int(codes[-1]) if codes else 0
+    if not codes:
+        return 0
+    try:
+        return int(codes[-1])
+    except TypeError, ValueError:
+        return None
 
 
 def _determine_state(data: dict[str, Any], error_code: int | None) -> State | None:
@@ -104,8 +110,9 @@ class GetState(NgiotGetCommand):
     def _handle_body_data_dict(
         cls, event_bus: EventBus, data: dict[str, Any]
     ) -> HandlingResult:
-        if "battery" in data:
-            event_bus.notify(BatteryEvent(int(data["battery"])))
+        if (battery := data.get("battery")) is not None:
+            with suppress(TypeError, ValueError):
+                event_bus.notify(BatteryEvent(int(battery)))
 
         error_code = _error_code(data)
         if (state := _determine_state(data, error_code)) is not None:
@@ -124,7 +131,8 @@ class GetState(NgiotGetCommand):
             cls._notify_consumables(event_bus, consumables)
 
         if (volume := data.get("volume")) is not None:
-            event_bus.notify(VolumeEvent(int(volume), maximum=None))
+            with suppress(TypeError, ValueError):
+                event_bus.notify(VolumeEvent(int(volume), maximum=None))
 
         if (child_lock := data.get("childLock")) is not None:
             event_bus.notify(ChildLockEvent(bool(child_lock)))
@@ -135,10 +143,10 @@ class GetState(NgiotGetCommand):
         return HandlingResult.success()
 
     @staticmethod
-    def _notify_consumables(
-        event_bus: EventBus, consumables: list[dict[str, Any]]
-    ) -> None:
+    def _notify_consumables(event_bus: EventBus, consumables: list[Any]) -> None:
         for component in consumables:
+            if not isinstance(component, dict):
+                continue
             comp_type = component.get("type")
             if not isinstance(comp_type, str):
                 continue

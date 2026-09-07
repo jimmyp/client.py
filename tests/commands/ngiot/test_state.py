@@ -153,3 +153,18 @@ async def test_GetState_incomplete_device_info_is_skipped() -> None:
     await _assert_state(
         {"deviceInfo": {"ip": "1.2.3.4"}, "battery": 1}, BatteryEvent(1)
     )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"battery": None, "childLock": True},
+        {"battery": "--", "childLock": True},
+        {"volume": "loud", "childLock": True},
+        {"error": ["x"], "childLock": True},
+        {"error": [None], "childLock": True},
+        {"consumables": [None, "garbage"], "childLock": True},
+    ],
+)
+async def test_GetState_malformed_field_does_not_abort(data: dict[str, Any]) -> None:
+    await _assert_state(data, ChildLockEvent(True))
