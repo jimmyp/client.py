@@ -54,10 +54,7 @@ class _DoThing(NgiotExecuteCommand):
 class _SetThing(NgiotSetCommand):
     NAME = "setThing"
     APN = 50001
-
-    @property
-    def get_command(self) -> type[NgiotGetCommand]:
-        return _GetThing
+    get_command = _GetThing
 
     def __init__(self, value: int) -> None:
         super().__init__({"thing": value})

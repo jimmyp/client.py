@@ -32,11 +32,12 @@ class Clean(NgiotExecuteCommand):
     """Clean command."""
 
     NAME = "clean"
+    # overridden per action; present for the class-variable check
     APN = 40008
 
     def __init__(self, action: CleanAction) -> None:
         apn, data, self._state = _CLEAN_ACTIONS[action]
-        super().__init__(data, apn=apn)
+        super().__init__(dict(data), apn=apn)
         self._action = action
 
     async def _execute(
@@ -56,7 +57,9 @@ class Clean(NgiotExecuteCommand):
 
     def _set_action(self, action: CleanAction) -> None:
         self._action = action
-        self._apn, self._args, self._state = _CLEAN_ACTIONS[action]
+        apn, data, self._state = _CLEAN_ACTIONS[action]
+        self._apn = apn
+        self._args = dict(data)
 
     def _handle_ok(
         self, event_bus: EventBus, _response: dict[str, Any]

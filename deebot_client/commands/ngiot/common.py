@@ -141,10 +141,7 @@ class NgiotExecuteCommand(NgiotCommand, ABC):
 class NgiotSetCommand(NgiotExecuteCommand, ABC):
     """ngiot set command linked to a get command for optimistic updates."""
 
-    @property
-    def get_command(self) -> type[NgiotGetCommand]:
-        """Return the corresponding ngiot get command."""
-        raise NotImplementedError
+    get_command: type[NgiotGetCommand]  # set by subclasses
 
     def _handle_ok(
         self, event_bus: EventBus, _response: dict[str, Any]

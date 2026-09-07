@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .common import NgiotGetCommand, NgiotSetCommand
+from .common import NgiotSetCommand
 from .state import GetState
 
 
@@ -11,11 +11,7 @@ class SetVolume(NgiotSetCommand):
 
     NAME = "setVolume"
     APN = 50023
-
-    @property
-    def get_command(self) -> type[NgiotGetCommand]:
-        """Return the corresponding get command."""
-        return GetState
+    get_command = GetState
 
     def __init__(self, volume: int) -> None:
         super().__init__({"volume": volume})

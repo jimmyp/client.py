@@ -5,7 +5,7 @@ from __future__ import annotations
 from deebot_client.events.water_info import WaterAmount
 from deebot_client.util import get_enum
 
-from .common import NgiotGetCommand, NgiotSetCommand
+from .common import NgiotSetCommand
 from .const import AMOUNT_TO_WATER_MODE
 from .state import GetState
 
@@ -15,11 +15,7 @@ class SetWaterAmount(NgiotSetCommand):
 
     NAME = "setWaterMode"
     APN = 50013
-
-    @property
-    def get_command(self) -> type[NgiotGetCommand]:
-        """Return the corresponding get command."""
-        return GetState
+    get_command = GetState
 
     def __init__(self, amount: WaterAmount | str) -> None:
         if isinstance(amount, str):
