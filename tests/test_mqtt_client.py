@@ -445,3 +445,22 @@ async def test_verify_config_fails(authenticator: Authenticator) -> None:
             await client.verify_config()
 
         client_mock.return_value.__aenter__.assert_called()
+
+
+def test_create_mqtt_config_default_ssl_context() -> None:
+    config = create_mqtt_config(device_id="test", country="IT")
+    ctx = config.ssl_context
+    assert isinstance(ctx, ssl.SSLContext)
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    assert ctx.check_hostname is True
+    # the Ecovacs root is an X.509 v1 certificate; strict verification rejects it
+    assert not ctx.verify_flags & ssl.VERIFY_X509_STRICT
+    common_names = {
+        value
+        for ca in ctx.get_ca_certs()
+        for rdn in ca["subject"]
+        for (name, value) in rdn
+        if name == "commonName"
+    }
+    assert "ECOVACS CA" in common_names
+    assert len(common_names) > 1  # system trust store is loaded as well

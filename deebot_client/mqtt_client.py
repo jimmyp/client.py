@@ -6,6 +6,7 @@ import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from importlib import resources
 import ssl
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -32,6 +33,16 @@ RECONNECT_INTERVAL = 5  # seconds
 
 _LOGGER = get_logger(__name__)
 _CLIENT_LOGGER = get_logger(f"{__name__}.client")
+
+
+def _ecovacs_ssl_context() -> ssl.SSLContext:
+    """Return a context trusting the private Ecovacs CA used by the brokers."""
+    ca = resources.files("deebot_client.certs").joinpath("ecovacs_ca.pem")
+    ctx = ssl.create_default_context(cadata=ca.read_text("ascii"))
+    ctx.load_default_certs()
+    # the Ecovacs root is an X.509 v1 certificate; strict verification rejects it
+    ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return ctx
 
 
 def _get_topics(device_info: DeviceInfo) -> list[str]:
@@ -91,9 +102,7 @@ def create_mqtt_config(
         hostname = f"mq{continent_postfix}.ecouser.net"
         port = 443
         if ssl_context is UNDEFINED:
-            ssl_ctx = ssl.create_default_context()
-            ssl_ctx.check_hostname = False
-            ssl_ctx.verify_mode = ssl.CERT_NONE
+            ssl_ctx = _ecovacs_ssl_context()
 
     return MqttConfiguration(
         hostname=hostname,

@@ -79,6 +79,7 @@ test = [
 features = ["pyo3/extension-module"]
 module-name = "deebot_client.rs"
 auditwheel = "repair"
+include = [{ path = "deebot_client/certs/*.pem", format = ["sdist", "wheel"] }]
 exclude = [
     { path = "**/.*/**", format = "sdist" },
     { path = "**/.*", format = "sdist" },
