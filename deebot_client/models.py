@@ -12,6 +12,13 @@ if TYPE_CHECKING:
     from deebot_client.capabilities import Capabilities
     from deebot_client.const import DataType
 
+
+class ApiDeviceService(TypedDict, total=False):
+    """Service hosts of a device."""
+
+    mqs: str
+
+
 ApiDeviceInfo = TypedDict(
     "ApiDeviceInfo",
     {
@@ -22,6 +29,7 @@ ApiDeviceInfo = TypedDict(
         "name": Required[str],
         "nick": str,
         "resource": Required[str],
+        "service": ApiDeviceService,
     },
     total=False,
 )

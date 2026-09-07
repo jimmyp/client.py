@@ -153,6 +153,21 @@ def api_device_info() -> ApiDeviceInfo:
 
 
 @pytest.fixture
+def ngiot_api_device_info() -> ApiDeviceInfo:
+    return ApiDeviceInfo(
+        {
+            "company": "eco-ng",
+            "did": "did",
+            "name": "name",
+            "nick": "nick",
+            "resource": "resource",
+            "class": "q287s6",
+            "service": {"mqs": "api-ngiot.dc-na.ww.ecouser.net"},
+        }
+    )
+
+
+@pytest.fixture
 def device_info(
     api_device_info: ApiDeviceInfo,
     static_device_info: StaticDeviceInfo,
