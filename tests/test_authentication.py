@@ -23,11 +23,13 @@ from deebot_client.exceptions import (
     InvalidVerificationCodeError,
 )
 from deebot_client.models import Credentials
+from deebot_client.ngiot_client import NgiotClient
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     from deebot_client.authentication import RestConfiguration
+    from deebot_client.models import ApiDeviceInfo
 
 
 _ACCOUNT_ID = "test@example.com"
@@ -499,3 +501,20 @@ async def test_request_device_verification_skips_invalid_duplicate_config(
     await auth.request_device_verification_code()
 
     assert len(api.requests["sendEmailVerifyCode"]) == 1
+
+
+async def test_post_ngiot_control(
+    rest_config: RestConfiguration, ngiot_api_device_info: ApiDeviceInfo
+) -> None:
+    authenticator = Authenticator(rest_config, "test", "test")
+    with patch.object(
+        NgiotClient, "control", AsyncMock(return_value={"code": 0})
+    ) as control:
+        result = await authenticator.post_ngiot_control(
+            ngiot_api_device_info, 10001, {"fields": ["battery"]}
+        )
+
+    assert result == {"code": 0}
+    control.assert_awaited_once_with(
+        device_info=ngiot_api_device_info, apn=10001, data={"fields": ["battery"]}
+    )

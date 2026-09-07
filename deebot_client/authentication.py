@@ -26,12 +26,16 @@ from .exceptions import (
 )
 from .logging_filter import get_logger
 from .models import Credentials
+from .ngiot_client import NgiotClient
+from .sst_authentication import SstAuthenticator
 from .util import cancel, create_task, md5
 from .util.continents import get_continent_url_postfix
 from .util.countries import get_ecovacs_country
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine, Mapping
+
+    from .models import ApiDeviceInfo
 
 
 _LOGGER = get_logger(__name__)
@@ -486,6 +490,9 @@ class Authenticator:
         self._credentials: Credentials | None = None
         self._refresh_handle: asyncio.TimerHandle | None = None
         self._tasks: set[asyncio.Future[Any]] = set()
+        self._ngiot_client = NgiotClient(
+            config.session, SstAuthenticator(self, config.session)
+        )
 
     async def authenticate(self, *, force: bool = False) -> Credentials:
         """Authenticate on ecovacs servers."""
@@ -544,6 +551,14 @@ class Authenticator:
             query_params=query_params,
             headers=headers,
             credentials=await self.authenticate(),
+        )
+
+    async def post_ngiot_control(
+        self, device_info: ApiDeviceInfo, apn: int, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Perform an ngiot endpoint/control request."""
+        return await self._ngiot_client.control(
+            device_info=device_info, apn=apn, data=data
         )
 
     async def teardown(self) -> None:
